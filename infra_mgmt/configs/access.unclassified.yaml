@@ -1,0 +1,8 @@
+roles:
+  developer:
+    policy_arns: ["arn:aws:iam::aws:policy/AdministratorAccess"]
+users:
+  - email: "dev1@example.com"
+    projects: ["projectA", "projectB", "shared"]
+  - email: "dev2@example.com"
+    projects: ["shared"]
