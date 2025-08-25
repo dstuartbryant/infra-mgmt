@@ -1,0 +1,14 @@
+services:
+  terraform:
+    build:
+      context: ..
+      dockerfile: ./dev-container/Dockerfile
+    entrypoint: "" # Override the default entrypoint
+    command: tail -f /dev/null # Explicitly set the command to keep it running
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT}
+    volumes:
+      - ..:/app/tf
+      - ${HOME}/.aws:/root/.aws
+    working_dir: /app/tf

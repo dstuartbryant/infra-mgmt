@@ -1,13 +1,8 @@
 projects:
-  - name: projectA
-    classifications:
-      - unclassified
-      - secret
-  - name: projectB
+  - name: testProjectA
     classifications:
       - unclassified
       - secret
   - name: shared
     classifications:
       - unclassified
-      - secret
