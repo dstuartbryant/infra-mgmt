@@ -4,12 +4,12 @@ variable "existing_accounts" {
     region     = string
   }))
   default = {
-    org_management = { account_id = "000000000000", region = "us-west-2" }
+    org_management = { account_id = "216989126675", region = "us-west-2" }
   }
 }
 
 variable "account_email_domain" {
   type        = string
   description = "The email domain to use for new AWS accounts."
-  default     = "example.com"
+  default     = "spacewego.com"
 }

@@ -42,8 +42,8 @@ locals {
   accounts = merge(
     var.existing_accounts,
     { for k, acct in aws_organizations_account.new : k => {
-        account_id = acct.id
-        region     = "us-west-2"
+      account_id = acct.id
+      region     = "us-west-2"
       }
     }
   )
