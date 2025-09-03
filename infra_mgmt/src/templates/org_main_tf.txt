@@ -1,0 +1,19 @@
+terraform {
+  required_version = ">= 1.13.0"
+  backend "s3" {}
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+{% for account in accounts %}
+module "s3git_{{account.alias }}" {
+    source    = "./modules/s3git"
+    providers = { aws = aws.{{ account.alias }} }
+
+    s3_git_bucket_name = "{{ prefix }}-git-remote-{{ account.name }}"
+}
+{% endfor %}

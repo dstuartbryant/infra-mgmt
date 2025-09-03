@@ -10,9 +10,35 @@
         "vscode": {
             "extensions": [
                 "hashicorp.terraform",
-                "fabiospampinato.vscode-terminals"
+                "fabiospampinato.vscode-terminals",
+                "ms-python.black-formatter",
+                "ms-python.flake8",
+                "eamodio.gitlens",
+                "ms-python.isort",
+                "yzhang.markdown-all-in-one",
+                "ms-python.vscode-pylance",
+                "ms-python.python",
+                "ms-python.debugpy",
+                "ms-vscode.cpptools",
+                "ms-vscode.cpptools-extension-pack",
+                "ms-vscode.cpptools-themes",
+                "twxs.cmake",
+                "ms-vscode.cmake-tools",
+                "mohsen1.prettify-json"
             ],
             "settings": {
+                "[python]": {
+                    "editor.defaultFormatter": "ms-python.black-formatter",
+                    "editor.formatOnSave": true,
+                },
+                "black-formatter.args": [
+                    "--line-length=88"
+                ],
+                "flake8.args": [
+                    "--max-line-length=88"
+                ],
+                "editor.formatOnSave": true,
+                "editor.defaultFormatter": "hashicorp.terraform",
                 "editor.rulers": [ 88 ],
                 "workbench.colorCustomizations": {
                     "terminal.background": "#39e4c5",

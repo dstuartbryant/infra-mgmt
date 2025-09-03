@@ -337,3 +337,11 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# Exclude .hcl files as they are likely to contain sensitive data
+*.hcl
+
+.config/
+.build/
+
+proto_configs/

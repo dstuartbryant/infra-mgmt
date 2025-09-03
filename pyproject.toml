@@ -8,6 +8,10 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "jinja2 (>=3.1.6,<4.0.0)",
+    "pyaml (>=25.7.0,<26.0.0)",
+    "ipython (>=9.4.0,<10.0.0)",
+    "pydantic (>=2.11.7,<3.0.0)"
 ]
 
 
