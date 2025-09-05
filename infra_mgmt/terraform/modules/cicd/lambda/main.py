@@ -10,6 +10,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 SNS_TOPIC_ARN = os.environ.get("SNS_TOPIC_ARN")
+SNS_BUILD_STATUS_TOPIC_ARN = os.environ.get("SNS_BUILD_STATUS_TOPIC_ARN")
 CODEBUILD_PROJECT_NAME = os.environ.get("CODEBUILD_PROJECT_NAME")
 
 sns_client = boto3.client("sns")
@@ -30,6 +31,7 @@ def handler(event, context):
 
         # URL Decode the object key
         object_key = urllib.parse.unquote_plus(object_key)
+        object_key = object_key.rstrip("/")
 
         # Split the key into parts to identify repo and branch
         key_parts = object_key.split("/")
@@ -43,14 +45,14 @@ def handler(event, context):
             continue
 
         repo_name = key_parts[0]
+        branch_name = "/".join(key_parts[3:])
 
         # Check for review branches: <repo_name>/refs/heads/review/*
-        if key_parts[3] == "review":
+        if branch_name.startswith("review/"):
             if not SNS_TOPIC_ARN:
                 logger.error("SNS_TOPIC_ARN not set, cannot send review notification.")
                 continue
 
-            branch_name = "/".join(key_parts[3:])
             subject = f"Git push to review branch in {repo_name}"
             message = (
                 f"A push was made to a review branch in the '{repo_name}' repository.\n\n"
@@ -72,7 +74,7 @@ def handler(event, context):
                 )
 
         # Check for main branch push: <repo_name>/refs/heads/main
-        elif len(key_parts) == 4 and key_parts[3] == "main":
+        elif branch_name.startswith("main"):
             if not CODEBUILD_PROJECT_NAME:
                 logger.error("CODEBUILD_PROJECT_NAME not set, cannot start build.")
                 continue
@@ -95,6 +97,18 @@ def handler(event, context):
                     repo_name,
                     response["build"]["id"],
                 )
+                if SNS_BUILD_STATUS_TOPIC_ARN:
+                    subject = f"CodeBuild Started for {repo_name}"
+                    message = (
+                        f"A new build has been triggered for the '{repo_name}' repository.\n\n"
+                        f"Build ID: {response['build']['id']}\n"
+                        f"You can view the build progress in the AWS Console."
+                    )
+                    sns_client.publish(
+                        TopicArn=SNS_BUILD_STATUS_TOPIC_ARN,
+                        Subject=subject,
+                        Message=message,
+                    )
             except Exception as e:
                 logger.error(
                     "Failed to start CodeBuild project for repo %s: %s", repo_name, e

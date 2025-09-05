@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gnupg \
     jq \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Node.js and npm from the node_builder stage

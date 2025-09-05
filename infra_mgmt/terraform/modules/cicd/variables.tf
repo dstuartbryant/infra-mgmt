@@ -6,7 +6,13 @@ variable "s3_git_bucket_name" {
 variable "review_notification_emails" {
   description = "A list of email addresses to notify for git pushes to 'review/' branches."
   type        = list(string)
-  default     = []
+  default     = ["stuart+unclassDev1@spacewego.com"]
+}
+
+variable "build_notification_emails" {
+  description = "A list of email addresses to notify for CodeBuild status changes."
+  type        = list(string)
+  default     = ["stuart+unclassDev1@spacewego.com"]
 }
 
 variable "codeartifact_domain_name" {
