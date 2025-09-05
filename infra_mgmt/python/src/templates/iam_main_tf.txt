@@ -1,0 +1,28 @@
+terraform {
+  required_version = ">= 1.13.0"
+  backend "s3" {}
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+
+provider "aws" {
+  region  = "{{ init_iam.region }}"
+  profile = "{{ init_iam.profile }}"
+
+}
+
+module "iam_users_groups" {
+  source    = "{{ init_iam.relative_module_path }}"
+  providers = { aws = aws }
+
+  users             = var.users
+  groups            = var.groups
+  group_accounts    = var.group_accounts
+  group_policy_arns = var.group_policy_arns
+
+}

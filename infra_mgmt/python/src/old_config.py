@@ -7,7 +7,7 @@ from typing import List, Tuple
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
-from .models import AccessConfig, Account, Project, Projects
+from .old_models import AccessConfig, Account, Project, Projects
 from .utils import quiet_terraform_output_json, rearrange_quiet_terraform_output_dict
 
 CURR_DIR = path.dirname(path.abspath(__file__))

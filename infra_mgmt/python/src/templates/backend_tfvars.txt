@@ -1,0 +1,4 @@
+aws_profile         = "{{ profile }}"
+aws_provider_region = "{{ region }}"
+bucket_name         = "{{ bucket_name }}"
+dynamodb_table_name = "{{ table_name }}"

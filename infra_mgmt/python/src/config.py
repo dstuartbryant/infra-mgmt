@@ -1,11 +1,11 @@
 import json
-from os import listdir, makedirs, path
-from typing import List, Tuple
+from os import makedirs, path, rmdir
+from typing import Tuple
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
-from .new_models import Account, AccountsList, TerraformUserConfig
+from .models import Account, AccountsList, InitIamParam, TerraformUserConfig
 from .utils import quiet_terraform_output_json, rearrange_quiet_terraform_output_dict
 
 CURR_DIR = path.dirname(path.abspath(__file__))
@@ -117,23 +117,11 @@ def get_accounts_info(accounts_output_path: str) -> AccountsList:
 
 def generate_initial_iam_inputs(
     config_path: str, accounts_output_path: str, initial_iam_json_path: str
-):
+) -> None:
     accounts = get_accounts_info(accounts_output_path)
     tuc = load_terraform_user_config(config_path)
 
     # Update group_accounts by replacing account names with account IDs
-    # new_dict_list = []
-    # for grp_acc in tuc.group_accounts:
-    #     new_dict = {}
-    #     group = list(grp_acc.keys())[0]
-    #     new_dict[group] = []
-    #     accs = list(grp_acc.values())[0]
-    #     for acc_name in accs:
-    #         acc_id = accounts.get_account_id(acc_name)
-    #         new_dict[group].append(acc_id)
-    #     new_dict_list.append(new_dict)
-    # tuc.group_accounts = new_dict_list
-
     new_dict = {}
     for group, group_accounts in tuc.group_accounts.items():
         new_dict[group] = []
@@ -158,13 +146,49 @@ def generate_initial_iam_inputs(
     with open(initial_iam_json_path, "w") as f:
         json.dump(iam_config, f, indent=4)
 
-    return tuc, accounts
-
 
 def generate_terrafrom_initial_iam_configs(
     config_path: str,
-    accounts_output_path: str,
-    initial_iam_json_path: str,
     initial_iam_terraform_dir: str,
-):
-    pass
+    iam_module_path: str,
+    overwrite: bool = False,
+) -> None:
+
+    tuc = load_terraform_user_config(config_path)
+    if path.isdir(initial_iam_terraform_dir):
+        if overwrite:
+            rmdir(initial_iam_terraform_dir)
+    else:
+        makedirs(initial_iam_terraform_dir)
+
+    environment = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+
+    # Get relative path from `iam_root_path` to `iam_module_path` b/c Terraform
+    # does not allow absolute paths to sources in module blocks
+    rel_path = path.relpath(iam_module_path, initial_iam_terraform_dir)
+
+    # Write main.tf file
+    template = environment.get_template("iam_main_tf.txt")
+    init_iam_params = InitIamParam(
+        profile=tuc.aws_profiles.identity_center.profile,
+        region=tuc.aws_profiles.identity_center.region,
+        relative_module_path=rel_path,
+    )
+    content = template.render(init_iam=init_iam_params)
+    init_iam_main_path = path.join(initial_iam_terraform_dir, "main.tf")
+    with open(init_iam_main_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # Write variables.tf
+    template = environment.get_template("iam_variables_tf.txt")
+    content = template.render()
+    init_iam_vars_path = path.join(initial_iam_terraform_dir, "variables.tf")
+    with open(init_iam_vars_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # Write output.tf
+    template = environment.get_template("iam_output_tf.txt")
+    content = template.render()
+    init_iam_out_path = path.join(initial_iam_terraform_dir, "output.tf")
+    with open(init_iam_out_path, "w", encoding="utf-8") as f:
+        f.write(content)

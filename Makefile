@@ -25,6 +25,7 @@ INFRA_DIR := $(MAKEFILE_DIR)/infra_mgmt
 # Overall collection of Terraform projects
 TERRAFORM_DIR := $(INFRA_DIR)/terraform
 BUILD_DIR := $(TERRAFORM_DIR)/.build
+MODULES_DIR := $(TERRAFORM_DIR)/modules
 
 # Terraform (bootstrapped) backend dir and files
 BACKEND_DIR := $(TERRAFORM_DIR)/backend
@@ -36,17 +37,18 @@ ACCOUNTS_CONFIG := $(CONFIG_DIR)/accounts.json
 ACCOUNTS_OUTPUT := $(CONFIG_DIR)/accounts_output.json
 
 # Terraform accounts creation mgmt
-CREATE_ACCOUNTS_DIR := $(TERRAFORM_DIR)/create_accounts
+ACCOUNTS_DIR := $(TERRAFORM_DIR)/accounts
 
 # Initial IAM user mgmt
-INIT_IAM_DIR := $(BUILD_DIR)/initial_iam
-INIT_IAM_CONFIG := $(CONFIG_DIR)/iam_users.json
-INIT_IAM_OUTPUT := $(CONFIG_DIR)/iam_output.json
+IAM_DIR := $(BUILD_DIR)/iam
+IAM_CONFIG := $(CONFIG_DIR)/iam_users.json
+IAM_OUTPUT := $(CONFIG_DIR)/iam_output.json
+IAM_MODULE := $(MODULES_DIR)/iam_users_groups
 
 # Terraform org mgmt
 ORG_DIR := $(TERRAFORM_DIR)/.build/testProjectA_unclassified
 
-.PHONY: all show-paths bootstrap backend-config accounts org
+.PHONY: all show-paths bootstrap backend-init backend-config accounts org
 
 # Default target
 all: bootstrap backend-config accounts org
@@ -57,9 +59,12 @@ show-paths:
 
 # Step 1: Apply bootstrap (creates S3 + DynamoDB backend infra)
 bootstrap:
+	@echo "\n>>> Generating backend terraform.tfvars..."
+	python -m infra_mgmt.python.bin.backend $(USER_CONFIG_DIR)/config.yaml $(BACKEND_DIR)
 	@echo "\n>>> Bootstrapping backend..."
-	terraform -chdir=$(BACKEND_DIR) init -upgrade
+	terraform -chdir=$(BACKEND_DIR) init
 	terraform -chdir=$(BACKEND_DIR) apply -auto-approve
+
 
 # Step 2: Generate backend.hcl file from bootstrap outputs
 backend-config: bootstrap
@@ -75,40 +80,44 @@ backend-config: bootstrap
 
 
 accounts-init: backend-config
+	@echo "\n>>> Generating accounts.json..."
+	python -m infra_mgmt.python.bin.accounts $(USER_CONFIG_DIR)/config.yaml $(ACCOUNTS_CONFIG)
 	@echo "\n>>> Initializing for accounts..."
-	terraform -chdir=$(CREATE_ACCOUNTS_DIR) init \
+	terraform -chdir=$(ACCOUNTS_DIR) init \
 	  -backend-config=$(BACKEND_HCL) \
 	  -backend-config="key=accounts/terraform.tfstate"
 
 accounts-plan: 
 	@echo "\n>>> Planning accounts..."
-	terraform -chdir=$(CREATE_ACCOUNTS_DIR) plan -var-file=$(ACCOUNTS_CONFIG)
+	terraform -chdir=$(ACCOUNTS_DIR) plan -var-file=$(ACCOUNTS_CONFIG)
 
-accounts-apply: 
+accounts-apply: accounts-init
 	@echo "\n>>> Applying accounts..."
-	terraform -chdir=$(CREATE_ACCOUNTS_DIR) apply -auto-approve -var-file=$(ACCOUNTS_CONFIG)
-
-accounts-output: 
+	terraform -chdir=$(ACCOUNTS_DIR) apply -auto-approve -var-file=$(ACCOUNTS_CONFIG)
 	@echo "\n>>> Fetching accounts output..."
-	terraform -chdir=$(CREATE_ACCOUNTS_DIR) output -json > $(ACCOUNTS_OUTPUT)
+	terraform -chdir=$(ACCOUNTS_DIR) output -json > $(ACCOUNTS_OUTPUT)
+	@echo "Done!"
 
-init-iam-init: backend-config
-	@echo "\n>>> Initializing for init-iam..."
-	terraform -chdir=$(INIT_IAM_DIR) init \
+iam-config: 
+	@echo "\n>>> Configuring IAM..."
+	python -m infra_mgmt.python.bin.iam $(USER_CONFIG_DIR)/config.yaml $(ACCOUNTS_OUTPUT) $(IAM_CONFIG) $(IAM_DIR) $(IAM_MODULE)
+
+
+iam-init: backend-config iam-config
+	@echo "\n>>> Initializing for IAM..."
+	terraform -chdir=$(IAM_DIR) init \
 	  -backend-config=$(BACKEND_HCL) \
 	  -backend-config="key=init_iam/terraform.tfstate"
 
-init-iam-plan: 
+iam-plan: 
 	@echo "\n>>> Planning init-iam..."
-	terraform -chdir=$(INIT_IAM_DIR) plan -var-file=$(INIT_IAM_CONFIG)
+	terraform -chdir=$(IAM_DIR) plan -var-file=$(IAM_CONFIG)
 
-init-iam-apply: 
-	@echo "\n>>> Applying init-iam..."
-	terraform -chdir=$(INIT_IAM_DIR) apply -auto-approve -var-file=$(INIT_IAM_CONFIG)
-
-init-iam-output: 
-	@echo "\n>>> Fetching init-iam output..."
-	terraform -chdir=$(INIT_IAM_DIR) output -json > $(INIT_IAM_OUTPUT)
+iam-apply: 
+	@echo "\n>>> Applying IAM..."
+	terraform -chdir=$(IAM_DIR) apply -auto-approve -var-file=$(IAM_CONFIG)
+	@echo "\n>>> Fetching IAM output..."
+	terraform -chdir=$(IAM_DIR) output -json > $(IAM_OUTPUT)
 
 
 org-init: backend-config

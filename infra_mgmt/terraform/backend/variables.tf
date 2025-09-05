@@ -1,7 +1,6 @@
 variable "aws_provider_region" {
   description = "The AWS region that changes will be made in for your AWS account."
   type        = string
-  default     = "us-west-2"
 }
 
 variable "aws_profile" {

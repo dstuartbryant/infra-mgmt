@@ -1,0 +1,35 @@
+variable "groups" {
+  description = "List of Identity Center groups to create"
+  type        = list(string)
+}
+
+variable "group_accounts" {
+  description = "Map of group name -> list of AWS account IDs the group should have access to"
+  type        = map(list(string))
+}
+
+variable "users" {
+  description = <<EOT
+List of Identity Center users to create.
+Each user object should contain:
+- name   = Display name
+- email  = Email address
+- groups = list of groups to assign user to
+EOT
+  type = list(object({
+    display_name = string
+    user_name    = string
+    name = object({
+      given_name  = string
+      family_name = string
+    })
+    email  = string
+    groups = list(string)
+  }))
+}
+
+variable "group_policy_arns" {
+  description = "Optional map of group name -> list of policy ARNs for SSO Permission Sets"
+  type        = map(list(string))
+  default     = {}
+}

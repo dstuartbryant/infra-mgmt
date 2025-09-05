@@ -1,0 +1,23 @@
+output "iam_groups" {
+  value = module.iam_users_groups.groups
+}
+
+output "iam_users" {
+  value = module.iam_users_groups.users
+}
+
+output "iam_group_memberships" {
+  value = module.iam_users_groups.group_memberships
+}
+
+output "iam_permission_sets" {
+  value = module.iam_users_groups.permission_sets
+}
+
+output "iam_policy_attachments" {
+  value = module.iam_users_groups.policy_attachments
+}
+
+output "iam_account_assignments" {
+  value = module.iam_users_groups.account_assignments
+}

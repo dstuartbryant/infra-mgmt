@@ -1,7 +1,13 @@
 # Dockerfile for astro service
+
+# Stage 1: Build Node.js dependencies
+FROM node:20 as node_builder
+RUN npm install -g @google/gemini-cli
+
+# Stage 2: Final image
 FROM python:3.12-slim
 
-# Install repo-specific requirements if any
+# Install repo-specific requirements
 RUN apt-get update && apt-get install -y \
     make \
     curl \
@@ -9,7 +15,14 @@ RUN apt-get update && apt-get install -y \
     git \
     zsh \
     nano \
+    ca-certificates \
+    gnupg \
+    jq \
     && rm -rf /var/lib/apt/lists/*
+
+# Copy Node.js and npm from the node_builder stage
+COPY --from=node_builder /usr/local/bin/ /usr/local/bin/
+COPY --from=node_builder /usr/local/lib/node_modules /usr/local/lib/node_modules
 
 # Install AWS CLI v2 from official source
 RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip" && \
@@ -48,4 +61,3 @@ COPY ./zsh/.p10k.zsh /root/.p10k.zsh
 RUN git config --global core.editor "nano"
 RUN git config --global user.name "stuart"
 RUN git config --global user.email "stuart@spacewego.com"
-
