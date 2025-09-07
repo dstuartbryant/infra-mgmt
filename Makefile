@@ -36,6 +36,8 @@ CONFIG_DIR := $(TERRAFORM_DIR)/.config
 ACCOUNTS_CONFIG := $(CONFIG_DIR)/accounts.json
 ACCOUNTS_OUTPUT := $(CONFIG_DIR)/accounts_output.json
 
+LOGS_DIR := $(TERRAFORM_DIR)/.logs
+
 # Terraform accounts creation mgmt
 ACCOUNTS_DIR := $(TERRAFORM_DIR)/accounts
 
@@ -46,7 +48,9 @@ IAM_OUTPUT := $(CONFIG_DIR)/iam_output.json
 IAM_MODULE := $(MODULES_DIR)/iam_users_groups
 
 # Terraform org mgmt
-ORG_DIR := $(TERRAFORM_DIR)/.build/testProjectA_unclassified
+ORG_DIR := $(TERRAFORM_DIR)/.build/org
+ORG_OUTPUT_DIR := $(CONFIG_DIR)/org
+
 
 .PHONY: all show-paths bootstrap backend-init backend-config accounts org
 
@@ -119,25 +123,39 @@ iam-apply:
 	@echo "\n>>> Fetching IAM output..."
 	terraform -chdir=$(IAM_DIR) output -json > $(IAM_OUTPUT)
 
+org-config:
+	@echo "\n>>> Configuring ORG..."
+	python -m infra_mgmt.python.bin.org $(USER_CONFIG_DIR)/config.yaml $(ACCOUNTS_OUTPUT) $(IAM_CONFIG) $(ORG_DIR) 
 
-org-init: backend-config
-	@echo "\n>>> Initializing for org management..."
-	terraform -chdir=$(ORG_DIR) init \
-	  -backend-config=$(BACKEND_HCL) \
-	  -backend-config="key=org/terraform.tfstate"
+org-init:
+	@echo "\n>>> Initializing org environments..."
+	@mkdir -p $(LOGS_DIR)
+	@for dir in $(shell find $(ORG_DIR) -mindepth 1 -maxdepth 1 -type d -exec basename {} \;); do \
+		mkdir -p $(LOGS_DIR)/$$dir
+		echo "\n>>> Initializing for account: $$dir..."; \
+		(terraform -chdir=$(ORG_DIR)/$$dir init -no-color \
+		  -backend-config=$(BACKEND_HCL) \
+		  -backend-config="key=org/$$dir/terraform.tfstate" 2>&1 | tee $(LOGS_DIR)/$$dir/$$dir-init.log); \
+	done
 
-org-console: 
-	@echo "\n>>> Org console..."
-	terraform -chdir=$(ORG_DIR) console
+org-plan:
+	@echo "\n>>> Planning org environments..."
+	@for dir in $(shell find $(ORG_DIR) -mindepth 1 -maxdepth 1 -type d -exec basename {} \;); do \
+		echo "\n>>> Planning for account: $$dir..."; \
+		(terraform -chdir=$(ORG_DIR)/$$dir plan -no-color 2>&1 \
+		  | tee $(LOGS_DIR)/$$dir/$$dir-planning.log); \
+	done
 
-org-plan: 
-	@echo "\n>>> Planning org..."
-	terraform -chdir=$(ORG_DIR) plan
+org-apply:
+	@echo "\n>>> Applying org environments..."
+	@mkdir -p $(ORG_OUTPUT_DIR)
+	@for dir in $(shell find $(ORG_DIR) -mindepth 1 -maxdepth 1 -type d -exec basename {} \;); do \
+		echo "\n>>> Applying for account: $$dir..."; \
+		(terraform -chdir=$(ORG_DIR)/$$dir apply -auto-approve -no-color 2>&1 \
+		  | tee $(LOGS_DIR)/$$dir/$$dir-applying.log); \
+		terraform -chdir=$(ORG_DIR)/$$dir output -json > $(ORG_OUTPUT_DIR)/$$dir.json
+	done
 
-# # Step 4: Init + Apply org with backend
-# org: accounts backend-config
-# 	@echo ">>> Deploying org..."
-# 	terraform -chdir=org init -reconfigure \
-# 	  -backend-config=../backend.hcl \
-# 	  -backend-config="key=org/terraform.tfstate"
-# 	terraform -chdir=org apply -auto-approve
+
+
+

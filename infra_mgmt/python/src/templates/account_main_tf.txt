@@ -1,0 +1,52 @@
+terraform {
+  required_version = ">= 1.13.0"
+  backend "s3" {}
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  alias   = "org_west"
+  region  = "us-west-2"
+  profile = "{{ west_profile }}"
+
+  assume_role {
+    role_arn = "arn:aws:iam::${var.target_account_id}:role/${var.target_account_role_name}"
+  }
+}
+
+provider "aws" {
+  alias   = "identity_center"
+  region  = "us-east-1" # IAM Identity Center is a global service, but the API endpoint is in us-east-1
+  profile = "{{ id_center_profile }}"
+}
+
+data "aws_ssoadmin_instances" "this" {
+  provider = aws.identity_center
+}
+
+locals {
+  identity_store_id = tolist(data.aws_ssoadmin_instances.this.identity_store_ids)[0]
+}
+
+module "cicd" {
+  source = "../../../modules/cicd"
+
+  providers = {
+    aws.org_west        = aws.org_west
+    aws.identity_center = aws.identity_center
+  }
+
+  s3_git_bucket_name           = var.s3_git_bucket_name
+  review_notification_emails   = var.review_notification_emails
+  build_notification_emails    = var.build_notification_emails
+  codeartifact_domain_name     = var.codeartifact_domain_name
+  codeartifact_repository_name = var.codeartifact_repository_name
+  codebuild_project_name       = var.codebuild_project_name
+  identitystore_id             = local.identity_store_id
+  iam_output_json_path         = "${path.module}/../../../.config/iam_output.json"
+}

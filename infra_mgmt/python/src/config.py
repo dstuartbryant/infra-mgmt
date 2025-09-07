@@ -1,6 +1,6 @@
 import json
 from os import makedirs, path, rmdir
-from typing import Tuple
+from typing import List, Tuple
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
@@ -14,6 +14,16 @@ TEMPLATES_DIR = path.join(CURR_DIR, "templates")
 
 class ConfigError(Exception):
     pass
+
+
+def config_makedirs(dirpath: str, overwrite: bool) -> None:
+    """Custom version of makedirs method to facilitate overwrites if/when necessary."""
+    if path.isdir(dirpath):
+        if overwrite:
+            rmdir(dirpath)
+            makedirs(dirpath)
+    else:
+        makedirs(dirpath)
 
 
 def split_email(email: str) -> Tuple[str, str]:
@@ -155,11 +165,7 @@ def generate_terrafrom_initial_iam_configs(
 ) -> None:
 
     tuc = load_terraform_user_config(config_path)
-    if path.isdir(initial_iam_terraform_dir):
-        if overwrite:
-            rmdir(initial_iam_terraform_dir)
-    else:
-        makedirs(initial_iam_terraform_dir)
+    config_makedirs(initial_iam_terraform_dir, overwrite)
 
     environment = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
@@ -192,3 +198,95 @@ def generate_terrafrom_initial_iam_configs(
     init_iam_out_path = path.join(initial_iam_terraform_dir, "output.tf")
     with open(init_iam_out_path, "w", encoding="utf-8") as f:
         f.write(content)
+
+
+def get_review_build_emails_in_account(
+    iam_inputs_path: str, account: Account
+) -> Tuple[List[str], List[str]]:
+
+    emails = []
+    iam_input = json.load(open(iam_inputs_path, "r"))
+    for user in iam_input["users"]:
+        for group in user["groups"]:
+            if "developer" in group:
+                if account.alias.replace("unclassified", "unclass") in group:
+                    emails.append(user["email"])
+    return emails
+
+
+def generate_individual_org_terraform_account_modules(
+    config_path: str,
+    accounts_output_path: str,
+    org_terraform_dir: str,
+    iam_inputs_path: str,
+    overwrite: bool = False,
+):
+    """Generates individual root Terraform modules for each AWS account.
+
+    Steps: For each account
+    ------------------------
+    [1] Get account name and create .build/accounts/ sub-dirs for it
+    [2] Extract configs for template variables
+    [3] Create .tf files from templates
+    [4] Create terraform.tfvars (or similar) from configs
+    """
+
+    config_makedirs(org_terraform_dir, overwrite)
+    tuc = load_terraform_user_config(config_path)
+    environment = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+
+    accounts = get_accounts_info(accounts_output_path)
+    for acc in accounts.accounts:
+        acc_name = acc.alias
+
+        # Create account module path and ensure directory exists
+        acc_module_path = path.join(org_terraform_dir, acc_name)
+        config_makedirs(acc_module_path, overwrite)
+
+        # Write main.tf file
+        template = environment.get_template("account_main_tf.txt")
+        content = template.render(
+            west_profile=tuc.aws_profiles.org_west.profile,
+            id_center_profile=tuc.aws_profiles.identity_center.profile,
+        )
+        acc_main_path = path.join(acc_module_path, "main.tf")
+        with open(acc_main_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        # Write variables.tf
+        template = environment.get_template("account_variables_tf.txt")
+        content = template.render()
+        acc_vars_path = path.join(acc_module_path, "variables.tf")
+        with open(acc_vars_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        # Write output.tf
+        template = environment.get_template("account_output_tf.txt")
+        content = template.render()
+        acc_out_path = path.join(acc_module_path, "output.tf")
+        with open(acc_out_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        # Write terraform.tfvars
+        target_accound_id = acc.account_ids
+        s3_git_bucket_name = f"pulse-{acc.name.lower()}-s3-git-bucket"
+        codeartifact_domain_name = f"pulse-{acc.name.lower()}-ca-domain-1"
+        codeartifact_repository_name = f"pulse-{acc.name.lower()}-ca-repo-1"
+        codebuild_project_name = f"pulse-{acc.name.lower()}-build-1"
+
+        emails = get_review_build_emails_in_account(
+            iam_inputs_path=iam_inputs_path, account=acc
+        )
+        template = environment.get_template("account_tfvars.txt")
+        content = template.render(
+            target_accound_id=target_accound_id,
+            s3_git_bucket_name=s3_git_bucket_name,
+            review_notification_emails=emails,
+            build_notification_emails=emails,
+            codeartifact_domain_name=codeartifact_domain_name,
+            codeartifact_repository_name=codeartifact_repository_name,
+            codebuild_project_name=codebuild_project_name,
+        )
+        acc_tfvars_path = path.join(acc_module_path, "terraform.tfvars")
+        with open(acc_tfvars_path, "w", encoding="utf-8") as f:
+            f.write(content)
