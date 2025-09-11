@@ -66,6 +66,36 @@ def load_terraform_user_config(config_path: str) -> TerraformUserConfig:
                     f"one of {', '.join(tuc.projects)}"
                 )
 
+    # Cross-check project names and those in vpn_vpc.project_octets, and check for
+    # overlapping octets (should not be any)
+    all_non_client_octets = []
+    all_client_octets = []
+    for project_name, octet_dict in tuc.vpn_vpc.project_octets.items():
+        if project_name not in tuc.projects:
+            raise ValueError(
+                f"Account {acc} in vpn_vpc.project_octets not in projects list. "
+                f"Expecting one of {', '.join(tuc.projects)}"
+            )
+        all_non_client_octets.append(octet_dict["vpc_and_subnet"])
+        all_client_octets.append(octet_dict["client"])
+
+        num_non_client_octets = len(all_non_client_octets)
+        num_client_octets = len(all_client_octets)
+
+        non_client_octet_set = set(all_non_client_octets)
+        if len(non_client_octet_set) < num_non_client_octets:
+            raise ValueError(
+                "Non-unique non-client octet numbering found. Project octets must be "
+                "unique to avoid overlapping VPN/VPC CIDR blocks."
+            )
+
+        client_octet_set = set(all_client_octets)
+        if len(client_octet_set) < num_client_octets:
+            raise ValueError(
+                "Non-unique client octet numbering found. Project octets must be "
+                "unique to avoid overlapping VPN/VPC CIDR blocks."
+            )
+
     # Cross-check user assigned groups to those listed in groups
     for user in tuc.unclass_users:
         for grp in user.groups:
@@ -274,6 +304,8 @@ def generate_individual_org_terraform_account_modules(
         codeartifact_repository_name = f"pulse-{acc.name.lower()}-ca-repo-1"
         codebuild_project_name = f"pulse-{acc.name.lower()}-build-1"
 
+        account_cidr_blocks = tuc.vpn_vpc.get_project_cidr_blocks(acc.name)
+
         emails = get_review_build_emails_in_account(
             iam_inputs_path=iam_inputs_path, account=acc
         )
@@ -286,6 +318,11 @@ def generate_individual_org_terraform_account_modules(
             codeartifact_domain_name=codeartifact_domain_name,
             codeartifact_repository_name=codeartifact_repository_name,
             codebuild_project_name=codebuild_project_name,
+            vpc_cidr_block=account_cidr_blocks.vpc_cidr_block,
+            subnet_cidr_block=account_cidr_blocks.subnet_cidr_block,
+            client_vpn_endpoint_client_cidr_block=account_cidr_blocks.client_cidr,
+            cert_common_name=tuc.vpn_vpc.sso_certificate.common_name,
+            cert_organization=tuc.vpn_vpc.sso_certificate.organization,
         )
         acc_tfvars_path = path.join(acc_module_path, "terraform.tfvars")
         with open(acc_tfvars_path, "w", encoding="utf-8") as f:

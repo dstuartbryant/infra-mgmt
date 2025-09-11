@@ -50,3 +50,17 @@ module "cicd" {
   identitystore_id             = local.identity_store_id
   iam_output_json_path         = "${path.module}/../../../.config/iam_output.json"
 }
+
+module "vpc_vpn" {
+  source = "../../../modules/vpc-vpn"
+
+  providers = {
+    aws = aws.org_west
+  }
+
+  vpc_cidr_block                        = var.vpc_cidr_block
+  subnet_cidr_block                     = var.subnet_cidr_block
+  client_vpn_endpoint_client_cidr_block = var.client_vpn_endpoint_client_cidr_block
+  cert_common_name                      = var.cert_common_name
+  cert_organization                     = var.cert_organization
+}

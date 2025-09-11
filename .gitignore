@@ -343,5 +343,6 @@ terraform.rc
 
 .config/
 .build/
+.build_backup/
 
 proto_configs/
