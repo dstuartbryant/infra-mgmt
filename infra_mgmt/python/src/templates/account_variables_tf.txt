@@ -40,13 +40,23 @@ variable "codebuild_project_name" {
   type        = string
 }
 
+variable "account_alias" {
+  description = "The short name/alias of the AWS account."
+  type        = string
+}
+
 variable "vpc_cidr_block" {
   description = "The CIDR block for the VPC."
   type        = string
 }
 
 variable "subnet_cidr_block" {
-  description = "The CIDR block for the subnet."
+  description = "The CIDR block for the private subnet."
+  type        = string
+}
+
+variable "public_subnet_cidr_block" {
+  description = "The CIDR block for the public subnet."
   type        = string
 }
 

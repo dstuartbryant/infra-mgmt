@@ -4,12 +4,7 @@ variable "vpc_cidr_block" {
 }
 
 variable "subnet_cidr_block" {
-  description = "The CIDR block for the private subnet."
-  type        = string
-}
-
-variable "public_subnet_cidr_block" {
-  description = "The CIDR block for the public subnet (for NAT Gateway)."
+  description = "The CIDR block for the subnet."
   type        = string
 }
 
@@ -27,6 +22,3 @@ variable "cert_organization" {
   description = "The organization name for the self-signed certificate."
   type        = string
 }
-
-
-

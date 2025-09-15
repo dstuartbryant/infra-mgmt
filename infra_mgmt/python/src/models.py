@@ -21,6 +21,7 @@ class User(BaseModel):
     name: Name
     email: str
     groups: List[str]
+    vpn_access: bool = False
 
 
 class AwsProfile(BaseModel):
@@ -49,6 +50,7 @@ class ProjectCidrBlocks(BaseModel):
     project_name: str
     vpc_cidr_block: str
     subnet_cidr_block: str
+    public_subnet_cidr_block: str
     client_vpn_endpoint_client_cidr_block: str
 
     @property
@@ -77,8 +79,8 @@ def update_nth_octet_from_base(base: str, n: int, update_to: str) -> str:
     return ".".join(octets) + f"/{subnet_mask}"
 
 
-class SsoCertificate(BaseModel):
-    """Models Terraform user configurations for VPN/VPC SSO certificate"""
+class ServerCertificate(BaseModel):
+    """Models Terraform user configurations for VPN/VPC server certificate"""
 
     common_name: str
     organization: str
@@ -89,8 +91,9 @@ class VpnVpc(BaseModel):
 
     vpc_cidr_block_base: str
     subnet_cidr_block: str
+    public_subnet_cidr_block_base: str
     client_cidr_block_base: str
-    sso_certificate: SsoCertificate
+    server_certificate: ServerCertificate
     project_octets: dict
 
     def get_project_cidr_blocks(self, project_name: str) -> ProjectCidrBlocks:
@@ -103,6 +106,11 @@ class VpnVpc(BaseModel):
                     ),
                     subnet_cidr_block=update_nth_octet_from_base(
                         self.subnet_cidr_block, 2, octet_dict["vpc_and_subnet"]
+                    ),
+                    public_subnet_cidr_block=update_nth_octet_from_base(
+                        self.public_subnet_cidr_block_base,
+                        2,
+                        octet_dict["vpc_and_subnet"],
                     ),
                     client_vpn_endpoint_client_cidr_block=update_nth_octet_from_base(
                         self.client_cidr_block_base, 3, octet_dict["client"]

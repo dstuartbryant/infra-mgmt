@@ -3,13 +3,8 @@ output "vpc_id" {
   value       = aws_vpc.main.id
 }
 
-output "vpc_cidr" {
-  description = "The CIDR of the VPC."
-  value       = aws_vpc.main.cidr_block
-}
-
 output "subnet_id" {
-  description = "The ID of the private subnet."
+  description = "The ID of the subnet."
   value       = aws_subnet.main.id
 }
 
@@ -41,17 +36,5 @@ output "required_permission_set_statements" {
 output "server_certificate_pem" {
   description = "The PEM-encoded server certificate for the Client VPN."
   value       = tls_locally_signed_cert.server.cert_pem
-  sensitive   = true
-}
-
-output "ca_certificate_pem" {
-  description = "The PEM-encoded CA certificate for signing client certificates."
-  value       = tls_self_signed_cert.ca.cert_pem
-  sensitive   = true
-}
-
-output "ca_private_key_pem" {
-  description = "The PEM-encoded CA private key for signing client certificates."
-  value       = tls_private_key.ca.private_key_pem
   sensitive   = true
 }

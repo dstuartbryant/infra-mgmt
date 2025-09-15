@@ -163,3 +163,5 @@ resource "aws_ssoadmin_account_assignment" "group_assignments" {
   target_type        = "AWS_ACCOUNT"
   target_id          = each.value.account
 }
+
+

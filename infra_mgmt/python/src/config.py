@@ -273,6 +273,7 @@ def generate_individual_org_terraform_account_modules(
         acc_module_path = path.join(org_terraform_dir, acc_name)
         config_makedirs(acc_module_path, overwrite)
 
+        # --- Main Configs (main.tf, variables.tf, etc.) ---
         # Write main.tf file
         template = environment.get_template("account_main_tf.txt")
         content = template.render(
@@ -297,7 +298,7 @@ def generate_individual_org_terraform_account_modules(
         with open(acc_out_path, "w", encoding="utf-8") as f:
             f.write(content)
 
-        # Write terraform.tfvars
+        # --- TFVARS File ---
         target_accound_id = acc.account_ids
         s3_git_bucket_name = f"pulse-{acc.name.lower()}-s3-git-bucket"
         codeartifact_domain_name = f"pulse-{acc.name.lower()}-ca-domain-1"
@@ -320,10 +321,37 @@ def generate_individual_org_terraform_account_modules(
             codebuild_project_name=codebuild_project_name,
             vpc_cidr_block=account_cidr_blocks.vpc_cidr_block,
             subnet_cidr_block=account_cidr_blocks.subnet_cidr_block,
+            public_subnet_cidr_block=account_cidr_blocks.public_subnet_cidr_block,
             client_vpn_endpoint_client_cidr_block=account_cidr_blocks.client_cidr,
-            cert_common_name=tuc.vpn_vpc.sso_certificate.common_name,
-            cert_organization=tuc.vpn_vpc.sso_certificate.organization,
+            cert_common_name=tuc.vpn_vpc.server_certificate.common_name,
+            cert_organization=tuc.vpn_vpc.server_certificate.organization,
+            account_alias=acc_name,
         )
         acc_tfvars_path = path.join(acc_module_path, "terraform.tfvars")
         with open(acc_tfvars_path, "w", encoding="utf-8") as f:
             f.write(content)
+
+        # --- VPN Client Certificate Generation ---
+        # Find all users who have access to this account and have vpn_access enabled
+        vpn_users = []
+        all_users = tuc.unclass_users + tuc.secret_users
+        for user in all_users:
+            if not user.vpn_access:
+                continue
+
+            # Check if any of the user's groups grant access to the current account
+            for group_name in user.groups:
+                if acc.name in tuc.group_accounts.get(group_name, []):
+                    vpn_users.append(user)
+                    break  # User is added, no need to check other groups
+
+        # Write vpn_clients.tf file
+        if vpn_users:
+            template = environment.get_template("account_vpn_clients_tf.txt")
+            content = template.render(
+                vpn_users=vpn_users,
+                account_alias=acc_name,
+            )
+            acc_vpn_clients_path = path.join(acc_module_path, "vpn_clients.tf")
+            with open(acc_vpn_clients_path, "w", encoding="utf-8") as f:
+                f.write(content)

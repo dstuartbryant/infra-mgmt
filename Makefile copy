@@ -4,7 +4,7 @@
 # .ONESHELL Tells Make to execute all lines within a recipe in a single shell instance. 
 # This is crucial for heredocs to work correctly, as they are a shell feature and 
 # require the entire block to be processed by a single shell.
-.ONESHELL: 
+.ONESHELL:
 
 
 # Variables
@@ -50,9 +50,6 @@ IAM_MODULE := $(MODULES_DIR)/iam_users_groups
 # Terraform org mgmt
 ORG_DIR := $(TERRAFORM_DIR)/.build/org
 ORG_BUILD_OUTPUT_DIR := $(ORG_DIR)/.output
-
-# Get a list of the account-specific directories in the .build/org folder
-ORG_ACCOUNT_DIRS := $(shell find $(ORG_DIR) -mindepth 1 -maxdepth 1 -type d -not -name '.*' -exec basename {} \;)
 
 
 .PHONY: all show-paths bootstrap backend-init backend-config accounts org
@@ -133,8 +130,8 @@ org-config:
 org-init:
 	@echo "\n>>> Initializing org environments..."
 	@mkdir -p $(LOGS_DIR)
-	@for dir in $(ORG_ACCOUNT_DIRS); do \
-		mkdir -p $(LOGS_DIR)/$$dir; \
+	@for dir in $$(find $(ORG_DIR) -mindepth 1 -maxdepth 1 -type d -not -name '.*' -exec basename {} \;); do \
+		mkdir -p $(LOGS_DIR)/$$dir
 		echo "\n>>> Initializing for account: $$dir..."; \
 		(terraform -chdir=$(ORG_DIR)/$$dir init -no-color \
 		  -backend-config=$(BACKEND_HCL) \
@@ -143,7 +140,7 @@ org-init:
 
 org-plan:
 	@echo "\n>>> Planning org environments..."
-	@for dir in $(ORG_ACCOUNT_DIRS); do \
+	@for dir in $$(find $(ORG_DIR) -mindepth 1 -maxdepth 1 -type d -not -name '.*' -exec basename {} \;); do \
 		echo "\n>>> Planning for account: $$dir..."; \
 		(terraform -chdir=$(ORG_DIR)/$$dir plan -no-color 2>&1 \
 		  | tee $(LOGS_DIR)/$$dir/$$dir-planning.log); \
@@ -152,12 +149,12 @@ org-plan:
 org-apply:
 	@echo "\n>>> Applying org environments..."
 	@mkdir -p $(ORG_BUILD_OUTPUT_DIR)
-	@for dir in $(ORG_ACCOUNT_DIRS); do \
+	@for dir in $$(find $(ORG_DIR) -mindepth 1 -maxdepth 1 -type d -not -name '.*' -exec basename {} \;); do \
 		echo "\n>>> Applying for account: $$dir..."; \
 		(terraform -chdir=$(ORG_DIR)/$$dir apply -auto-approve -no-color 2>&1 \
 		  | tee $(LOGS_DIR)/$$dir/$$dir-applying.log); \
 		echo "\n>>> Fetching outputs for account: $$dir..."; \
-		terraform -chdir=$(ORG_DIR)/$$dir output -json > $(ORG_BUILD_OUTPUT_DIR)/$$dir.json; \
+		terraform -chdir=$(ORG_DIR)/$$dir output -json > $(ORG_BUILD_OUTPUT_DIR)/$$dir.json; 
 	done
 
 
@@ -169,123 +166,108 @@ vpn-config:
 		echo "ERROR: 'account' argument is required."; \
 		echo "Usage: make vpn-config account=<account_alias> user=<user_name>"; \
 		exit 1; \
-	f
+	fi
 	@if [ -z "$(user)" ]; then \
 		echo "ERROR: 'user' argument is required."; \
 		echo "Usage: make vpn-config account=<account_alias> user=<user_name>"; \
 		exit 1; \
-	f
+	fi
 
-	ACCOUNT_ALIAS=$(account); \
-	USER_NAME=$(user); \
-	ACCOUNT_DIR=$(ORG_DIR)/$(ACCOUNT_ALIAS); \
-	CERT_DIR=$(TERRAFORM_DIR)/.client_vpn_configs/$(ACCOUNT_ALIAS); \
-	USER_CERT_PATH=$(CERT_DIR)/$(USER_NAME).crt; \
-	USER_KEY_PATH=$(CERT_DIR)/$(USER_NAME).key; \
-	OUTPUT_DIR=generated_vpn_configs/$(ACCOUNT_ALIAS); \
-	OVPN_FILE=$(OUTPUT_DIR)/$(USER_NAME).ovpn; \
-	AWS_PROFILE=pulse-infra-admin; \
-	AWS_REGION=us-west-2; \
-	\
-	echo "\n>>> Generating VPN config for user '$${USER_NAME}' in account '$${ACCOUNT_ALIAS}'..."; \
-	\
-	if [ ! -f "$${USER_CERT_PATH}" ] || [ ! -f "$${USER_KEY_PATH}" ]; then \
-		echo "ERROR: Certificate or key file not found for user '$${USER_NAME}' in account '$${ACCOUNT_ALIAS}'."; \
-		echo "Searched for: $${USER_CERT_PATH} and $${USER_KEY_PATH}"; \
+	ACCOUNT_ALIAS=$(account)
+	USER_NAME=$(user)
+	ACCOUNT_DIR=$(ORG_DIR)/$(ACCOUNT_ALIAS)
+	CERT_DIR=$(TERRAFORM_DIR)/.client_vpn_configs/$(ACCOUNT_ALIAS)
+	USER_CERT_PATH=$(CERT_DIR)/$(USER_NAME).crt
+	USER_KEY_PATH=$(CERT_DIR)/$(USER_NAME).key
+	OUTPUT_DIR=generated_vpn_configs/$(ACCOUNT_ALIAS)
+	OVPN_FILE=$(OUTPUT_DIR)/$(USER_NAME).ovpn
+
+	# This profile is used to assume the OrganizationAccountAccessRole in the target account.
+	# It's defined in proto_configs/config.yaml
+	AWS_PROFILE=pulse-infra-admin
+	AWS_REGION=us-west-2
+
+	@echo "\n>>> Generating VPN config for user '$(USER_NAME)' in account '$(ACCOUNT_ALIAS)'..."
+
+	@if [ ! -f "$(USER_CERT_PATH)" ] || [ ! -f "$(USER_KEY_PATH)" ]; then \
+		echo "ERROR: Certificate or key file not found for user '$(USER_NAME)' in account '$(ACCOUNT_ALIAS)'."; \
+		echo "Searched for: $(USER_CERT_PATH) and $(USER_KEY_PATH)"; \
 		echo "Please ensure 'make org-apply' has been run successfully and the user has 'vpn_access: true'."; \
 		exit 1; \
-	f; \
-	\
-	mkdir -p $${OUTPUT_DIR}; \
-	\
-	echo "--> Fetching VPN Endpoint ID from Terraform state..."; \
-	VPN_ENDPOINT_ID=$$(terraform -chdir=$${ACCOUNT_DIR} output -raw client_vpn_endpoint_id); \
-	if [ -z "$$VPN_ENDPOINT_ID" ]; then \
-		echo "ERROR: Could not fetch VPN Endpoint ID for account '$${ACCOUNT_ALIAS}'."; \
+	fi
+
+	@mkdir -p $(OUTPUT_DIR)
+
+	@echo "--> Fetching VPN Endpoint ID from Terraform state..."
+	VPN_ENDPOINT_ID=$$(terraform -chdir=$(ACCOUNT_DIR) output -raw client_vpn_endpoint_id)
+	@if [ -z "$$VPN_ENDPOINT_ID" ]; then \
+		echo "ERROR: Could not fetch VPN Endpoint ID for account '$(ACCOUNT_ALIAS)'."; \
 		exit 1; \
-	f; \
-	\
-	echo "--> Downloading base VPN configuration from AWS..."; \
+	fi
+
+	@echo "--> Downloading base VPN configuration from AWS..."
 	aws ec2 export-client-vpn-client-configuration \
 		--client-vpn-endpoint-id $$VPN_ENDPOINT_ID \
-		--profile $${AWS_PROFILE} \
-		--region $${AWS_REGION} \
-		--output text > $${OVPN_FILE}; \
-	\
-	echo "--> Appending user certificate and key to configuration..."; \
-	printf '\n<cert>\n' >> $${OVPN_FILE}; \
-	cat $${USER_CERT_PATH} >> $${OVPN_FILE}; \
-	printf '\n</cert>\n' >> $${OVPN_FILE}; \
-	\
-	printf '\n<key>\n' >> $${OVPN_FILE}; \
-	cat $${USER_KEY_PATH} >> $${OVPN_FILE}; \
-	printf '\n</key>\n' >> $${OVPN_FILE}; \
-	\
-	echo "\n>>> Success!"; \
-	echo "VPN configuration file created at: $${OVPN_FILE}"; \
-	echo "Please distribute this file securely to the user."
+		--profile $(AWS_PROFILE) \
+		--region $(AWS_REGION) \
+		--output text > $(OVPN_FILE)
+
+	@echo "--> Appending user certificate and key to configuration..."
+	echo -e '\n<cert>' >> $(OVPN_FILE)
+	cat $(USER_CERT_PATH) >> $(OVPN_FILE)
+	echo '</cert>' >> $(OVPN_FILE)
+
+	echo -e '\n<key>' >> $(OVPN_FILE)
+	cat $(USER_KEY_PATH) >> $(OVPN_FILE)
+	echo '</key>' >> $(OVPN_FILE)
+
+	@echo "\n>>> Success!"
+	@echo "VPN configuration file created at: $(OVPN_FILE)"
+	@echo "Please distribute this file securely to the user."
 
 # Step 6 (Option B): Generate VPN configs for ALL users with generated certs
 .PHONY: vpn-configs-all
 vpn-configs-all:
 	@echo "\n>>> Generating all possible VPN configuration files..."
-	GENERATED_VPN_DIR=generated_vpn_configs; \
-	mkdir -p $$GENERATED_VPN_DIR; \
-	AWS_PROFILE=pulse-infra-admin; \
-	AWS_REGION=us-west-2; \
-	ROLE_NAME=OrganizationAccountAccessRole; \
-	\
-	for key_file in $$(find $(TERRAFORM_DIR)/.client_vpn_configs -name "*.key"); do \
+	GENERATED_VPN_DIR=generated_vpn_configs
+	@mkdir -p $(GENERATED_VPN_DIR)
+
+	# This profile is used to assume the OrganizationAccountAccessRole in the target account.
+	# It's defined in proto_configs/config.yaml
+	AWS_PROFILE=pulse-infra-admin
+	AWS_REGION=us-west-2
+
+	@for key_file in $$(find $(TERRAFORM_DIR)/.client_vpn_configs -name "*.key"); do \
 		USER_NAME=$$(basename $$key_file .key); \
 		ACCOUNT_ALIAS=$$(basename $$(dirname $$key_file)); \
 		ACCOUNT_DIR=$(ORG_DIR)/$$ACCOUNT_ALIAS; \
 		USER_CERT_PATH=$$(dirname $$key_file)/$$USER_NAME.crt; \
-		OUTPUT_DIR=$$GENERATED_VPN_DIR/$$ACCOUNT_ALIAS; \
+		OUTPUT_DIR=$(GENERATED_VPN_DIR)/$$ACCOUNT_ALIAS; \
 		OVPN_FILE=$$OUTPUT_DIR/$$USER_NAME.ovpn; \
 		\
 		echo "\n--> Found cert for user '$$USER_NAME' in account '$$ACCOUNT_ALIAS'. Generating config..."; \
 		mkdir -p $$OUTPUT_DIR; \
 		\
-		ACCOUNT_ID=$$(terraform -chdir=$$ACCOUNT_DIR output -raw target_account_id); \
 		VPN_ENDPOINT_ID=$$(terraform -chdir=$$ACCOUNT_DIR output -raw client_vpn_endpoint_id); \
-		\
-		if [ -z "$$VPN_ENDPOINT_ID" ] || [ -z "$$ACCOUNT_ID" ]; then \
-			echo "ERROR: Could not fetch required outputs for account '$$ACCOUNT_ALIAS'. Skipping."; \
-			echo "         (Have you run 'make org-apply' since the last configuration change?)"; \
+		if [ -z "$$VPN_ENDPOINT_ID" ]; then \
+			echo "ERROR: Could not fetch VPN Endpoint ID for account '$$ACCOUNT_ALIAS'. Skipping."; \
 			continue; \
 		fi; \
 		\
-		ROLE_ARN="arn:aws:iam::$$ACCOUNT_ID:role/$$ROLE_NAME"; \
-		\
-		echo "--> Assuming role $$ROLE_ARN..."; \
-		CREDS=$$(aws sts assume-role --role-arn $$ROLE_ARN --role-session-name "VPNConfigGen" --profile $$AWS_PROFILE --region $$AWS_REGION --output json); \
-		\
-		if [ -z "$$CREDS" ]; then \
-			echo "ERROR: Failed to assume role for account '$$ACCOUNT_ALIAS'. Skipping."; \
-			continue; \
-		fi; \
-		\
-		export AWS_ACCESS_KEY_ID=$$(echo $$CREDS | jq -r .Credentials.AccessKeyId); \
-		export AWS_SECRET_ACCESS_KEY=$$(echo $$CREDS | jq -r .Credentials.SecretAccessKey); \
-		export AWS_SESSION_TOKEN=$$(echo $$CREDS | jq -r .Credentials.SessionToken); \
-		\
-		echo "--> Downloading base VPN configuration from AWS..."; \
 		aws ec2 export-client-vpn-client-configuration \
 			--client-vpn-endpoint-id $$VPN_ENDPOINT_ID \
-			--region $$AWS_REGION \
+			--profile $(AWS_PROFILE) \
+			--region $(AWS_REGION) \
 			--output text > $$OVPN_FILE; \
 		\
-		unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; \
-		\
-		echo "--> Appending user certificate and key to configuration..."; \
-		printf '\n<cert>\n' >> $$OVPN_FILE; \
+		echo -e '\n<cert>' >> $$OVPN_FILE; \
 		cat $$USER_CERT_PATH >> $$OVPN_FILE; \
-		printf '\n</cert>\n' >> $$OVPN_FILE; \
+		echo '</cert>' >> $$OVPN_FILE; \
 		\
-		printf '\n<key>\n' >> $$OVPN_FILE; \
+		echo -e '\n<key>' >> $$OVPN_FILE; \
 		cat $$key_file >> $$OVPN_FILE; \
-		printf '\n</key>\n' >> $$OVPN_FILE; \
-	done; \
-	\
-	@echo "\n>>> Success!"; \
-	echo "All available VPN configuration files have been created in: $$GENERATED_VPN_DIR"
+		echo '</key>' >> $$OVPN_FILE; \
+	done
+
+	@echo "\n>>> Success!"
+	@echo "All available VPN configuration files have been created in: $(GENERATED_VPN_DIR)"
