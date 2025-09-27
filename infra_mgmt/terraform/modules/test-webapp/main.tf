@@ -8,22 +8,6 @@ terraform {
   }
 }
 
-# Find the latest Amazon Linux 2 AMI
-data "aws_ami" "amazon_linux_2" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-}
-
 # Security group to allow HTTP traffic only from the VPN
 resource "aws_security_group" "webapp_sg" {
   name        = "test-webapp-sg"
@@ -48,7 +32,7 @@ resource "aws_security_group" "webapp_sg" {
 
 # EC2 instance with Nginx
 resource "aws_instance" "nginx" {
-  ami           = data.aws_ami.amazon_linux_2.id
+  ami           = "ami-024e4b8b6ef78434a" # Pinned to a specific Amazon Linux 2 AMI for us-west-2
   instance_type = "t2.micro"
   subnet_id     = var.subnet_id
   vpc_security_group_ids = [aws_security_group.webapp_sg.id]

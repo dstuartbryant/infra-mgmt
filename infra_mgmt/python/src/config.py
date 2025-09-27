@@ -181,8 +181,14 @@ def generate_initial_iam_inputs(
         iam_config["users"].append(user_info)
 
     iam_config["group_policy_arns"] = {
-        "unclass_admin": ["arn:aws:iam::aws:policy/AdministratorAccess"]
+        "unclass_admin": ["arn:aws:iam::aws:policy/AdministratorAccess"],
+        "secret_admin": ["arn:aws:iam::aws:policy/AdministratorAccess"],
     }
+    for group in tuc.groups:
+        if "developer" in group:
+            iam_config["group_policy_arns"][group] = [
+                "arn:aws:iam::aws:policy/AWSCodeArtifactReadOnlyAccess"
+            ]
     with open(initial_iam_json_path, "w") as f:
         json.dump(iam_config, f, indent=4)
 
