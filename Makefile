@@ -51,6 +51,7 @@ IAM_MODULE := $(MODULES_DIR)/iam_users_groups
 ORG_DIR := $(TERRAFORM_DIR)/.build/org
 ORG_BUILD_OUTPUT_DIR := $(ORG_DIR)/.output
 
+
 # Get a list of the account-specific directories in the .build/org folder
 ORG_ACCOUNT_DIRS := $(shell find $(ORG_DIR) -mindepth 1 -maxdepth 1 -type d -not -name '.*' -exec basename {} \;)
 
@@ -160,6 +161,22 @@ org-apply:
 		terraform -chdir=$(ORG_DIR)/$$dir output -json > $(ORG_BUILD_OUTPUT_DIR)/$$dir.json; \
 	done
 
+org-destroy:
+	@echo "\n>>> Destroying org environments..."
+	@for dir in $(ORG_ACCOUNT_DIRS); do \
+		echo "\n>>> Destroying for account: $$dir..."; \
+		(terraform -chdir=$(ORG_DIR)/$$dir destroy -no-color 2>&1 \
+		  | tee $(LOGS_DIR)/$$dir/$$dir-destroying.log); \
+	done
+
+iam-destroy: 
+	@echo "\n>>> Destroying IAM..."
+	terraform -chdir=$(IAM_DIR) destroy -var-file=$(IAM_CONFIG)
+
+accounts-destroy: accounts-init
+	@echo "\n>>> Destroying accounts..."
+	terraform -chdir=$(ACCOUNTS_DIR) destroy -var-file=$(ACCOUNTS_CONFIG)
+	@echo "Done!"
 
 
 # Step 6 (Option A): Generate VPN config for a single user
