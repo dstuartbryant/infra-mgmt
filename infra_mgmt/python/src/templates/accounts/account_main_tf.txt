@@ -49,7 +49,7 @@ module "cicd" {
   codeartifact_repository_name = var.codeartifact_repository_name
   codebuild_project_name       = var.codebuild_project_name
   identitystore_id             = local.identity_store_id
-  iam_output_json_path         = "${path.module}/../../../.config/iam_output.json"
+  iam_output_json_path         = "${path.module}/../../.config/iam/iam_output.json"
 }   
 {% endif %}
 {% if vpc %}
@@ -57,7 +57,7 @@ module "vpc_vpn" {
   source = "../../../modules/vpc-vpn"
 
   providers = {
-    aws = aws.org_west
+    aws = aws.org_main
   }
 
   vpc_cidr_block                        = var.vpc_cidr_block
@@ -66,6 +66,7 @@ module "vpc_vpn" {
   client_vpn_endpoint_client_cidr_block = var.client_vpn_endpoint_client_cidr_block
   cert_common_name                      = var.cert_common_name
   cert_organization                     = var.cert_organization
+  split_tunnel                          = var.split_tunnel
 }
 {% endif %}
 {% if test_webapp %}
@@ -73,7 +74,7 @@ module "test_webapp" {
   source = "../../../modules/test-webapp"
 
   providers = {
-    aws = aws.org_west
+    aws = aws.org_main
   }
 
   vpc_id          = module.vpc_vpn.vpc_id
@@ -82,3 +83,48 @@ module "test_webapp" {
   vpc_cidr        = module.vpc_vpn.vpc_cidr
 }
 {% endif %}
+# --- Policy Aggregation and Application ---
+
+data "local_file" "iam_output" {
+  filename = "${path.module}/../../../.config/iam/iam_output.json"
+}
+{% if cicd or vpc %}
+locals {
+  groups_and_users = jsondecode(data.local_file.iam_output.content)
+
+  # Aggregate all required policy statements from the modules
+  all_developer_statements = concat(
+    {% if cicd %}
+    module.cicd.required_permission_set_statements,
+    {% endif %}
+    {% if vpc %}
+    module.vpc_vpn.required_permission_set_statements
+    {% endif %}
+    # Add other modules' outputs here in the future
+  )
+
+  # Create a normalized prefix from the account alias to reliably find the matching permission set
+  # e.g., "testProjectA_unclassified" -> "testprojecta_unclass"
+  # e.g., "testProjectA_secret"      -> "testprojecta_secret"
+  normalized_account_prefix = lower(replace(var.account_alias, "unclassified", "unclass"))
+}
+{% endif %}
+data "aws_ssoadmin_permission_set" "all" {
+  provider     = aws.identity_center
+  for_each     = toset(keys(local.groups_and_users.iam_permission_sets.value))
+  instance_arn = tolist(data.aws_ssoadmin_instances.this.arns)[0]
+  name         = each.key
+}
+
+resource "aws_ssoadmin_permission_set_inline_policy" "developer_access" {
+  provider           = aws.identity_center
+  # This robust filter finds the single developer permission set that starts with the account's normalized prefix
+  for_each           = { for ps in data.aws_ssoadmin_permission_set.all : ps.name => ps if startswith(lower(ps.name), local.normalized_account_prefix) && endswith(lower(ps.name), "developer") }
+  instance_arn       = tolist(data.aws_ssoadmin_instances.this.arns)[0]
+  permission_set_arn = each.value.arn
+
+  inline_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = local.all_developer_statements
+  })
+}

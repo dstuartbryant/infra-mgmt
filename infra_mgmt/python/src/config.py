@@ -549,9 +549,10 @@ def get_review_build_emails_in_account(
     iam_input = json.load(open(iam_inputs_path, "r"))
     for user in iam_input["users"]:
         for group in user["groups"]:
-            if "developer" in group:
-                if account.alias.replace("unclassified", "unclass") in group:
-                    emails.append(user["email"])
+            if "developer" in group.lower() or "admin" in group.lower():
+
+                emails.append(user["email"])
+    emails = list(set(emails))
     return emails
 
 
@@ -589,9 +590,6 @@ def generate_individual_terraform_account_modules(
     )
     for acc in accounts.accounts:
 
-        if acc.name != "Shared-U":
-            continue
-
         # Create account module path and ensure directory exists
         acc_module_path = path.join(accounts_tf_build_dir, acc.name)
         config_makedirs(acc_module_path, overwrite)
@@ -609,10 +607,6 @@ def generate_individual_terraform_account_modules(
                 vpc_config = service
             if isinstance(service, TestWebAppConfigModel):
                 test_webapp = True
-
-        # cicd = False
-        # vpc = True
-        # test_webapp = True
 
         # Write main.tf file
         template = environment.get_template("account_main_tf.txt")
@@ -694,4 +688,29 @@ def generate_individual_terraform_account_modules(
         acc_tfvars_path = path.join(acc_module_path, "terraform.tfvars")
         with open(acc_tfvars_path, "w", encoding="utf-8") as f:
             f.write(content)
-        break
+
+        # --- VPN Client Certificate Generation ---
+        # Find all users who have access to this account and have vpn_access enabled
+        if vpc:
+            vpn_users = []
+            all_users = tuc.iam.users
+            for user in all_users:
+                if not user.vpn_access:
+                    continue
+
+                # Check if any of the user's groups grant access to the current account
+                for group_name in user.groups:
+                    if acc.name in tuc.iam.group_accounts.get(group_name, []):
+                        vpn_users.append(user)
+                        break  # User is added, no need to check other groups
+
+            # Write vpn_clients.tf file
+            if vpn_users:
+                template = environment.get_template("account_vpn_clients_tf.txt")
+                content = template.render(
+                    vpn_users=vpn_users,
+                    account_alias=acc.name,
+                )
+                acc_vpn_clients_path = path.join(acc_module_path, "vpn_clients.tf")
+                with open(acc_vpn_clients_path, "w", encoding="utf-8") as f:
+                    f.write(content)

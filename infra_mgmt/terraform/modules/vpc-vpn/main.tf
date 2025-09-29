@@ -119,6 +119,11 @@ resource "tls_locally_signed_cert" "server" {
   allowed_uses          = ["key_encipherment", "digital_signature", "server_auth"]
 }
 
+resource "aws_acm_certificate" "ca" {
+  private_key      = tls_private_key.ca.private_key_pem
+  certificate_body = tls_self_signed_cert.ca.cert_pem
+}
+
 resource "aws_acm_certificate" "server" {
   private_key       = tls_private_key.server.private_key_pem
   certificate_body  = tls_locally_signed_cert.server.cert_pem
@@ -130,12 +135,13 @@ resource "aws_acm_certificate" "server" {
 ###################################
 resource "aws_ec2_client_vpn_endpoint" "main" {
   description            = "Client VPN endpoint"
-  client_cidr_block      = var.client_vpn_endpoint_client_cidr_block
   server_certificate_arn = aws_acm_certificate.server.arn
+  client_cidr_block      = var.client_vpn_endpoint_client_cidr_block
+  split_tunnel           = var.split_tunnel
 
   authentication_options {
     type                       = "certificate-authentication"
-    root_certificate_chain_arn = aws_acm_certificate.server.arn
+    root_certificate_chain_arn = aws_acm_certificate.ca.arn
   }
 
   connection_log_options {
@@ -159,4 +165,8 @@ resource "aws_ec2_client_vpn_route" "main" {
   client_vpn_endpoint_id = aws_ec2_client_vpn_endpoint.main.id
   destination_cidr_block = "0.0.0.0/0"
   target_vpc_subnet_id   = aws_subnet.main.id
+
+  timeouts {
+    create = "10m"
+  }
 }

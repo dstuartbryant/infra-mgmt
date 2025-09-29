@@ -1,109 +1,53 @@
 {% if cicd %}
 output "s3_git_bucket_name" {
   description = "Bucket name for S3 remote git repo."
-  value       = aws_s3_bucket.git_bucket.id
+  value       = module.cicd.s3_git_bucket_name
 }
 
 output "s3_git_bucket_arn" {
   description = "ARN for S3 git bucket"
-  value       = aws_s3_bucket.git_bucket.arn
+  value       = module.cicd.s3_git_bucket_arn
 }
 
 output "codeartifact_domain_name" {
   description = "The name of the CodeArtifact domain."
-  value       = aws_codeartifact_domain.this.domain
+  value       = module.cicd.codeartifact_domain_name
 }
 
 output "codeartifact_repository_name" {
   description = "The name of the CodeArtifact repository."
-  value       = aws_codeartifact_repository.this.repository
+  value       = module.cicd.codeartifact_repository_name
 }
 
 output "codebuild_project_name" {
   description = "The name of the CodeBuild project."
-  value       = aws_codebuild_project.this.name
-}
-
-output "required_permission_set_statements" {
-  description = "A list of IAM policy statements that should be applied to the developer permission set."
-  value = [
-    {
-      Sid    = "ListBucketsInConsole",
-      Effect = "Allow",
-      Action = [
-        "s3:ListAllMyBuckets"
-      ],
-      Resource = "*"
-    },
-    {
-      Sid    = "GitS3ObjectAccess",
-      Effect = "Allow",
-      Action = [
-        "s3:PutObject",
-        "s3:GetObject",
-        "s3:DeleteObject"
-      ],
-      Resource = "${aws_s3_bucket.git_bucket.arn}/*"
-    },
-    {
-      Sid    = "GitS3ListAccess",
-      Effect = "Allow",
-      Action = [
-        "s3:ListBucket"
-      ],
-      Resource = [
-        aws_s3_bucket.git_bucket.arn
-      ]
-    },
-    {
-      Sid    = "CodeBuildReadOnlyAccess",
-      Effect = "Allow",
-      Action = [
-        "codebuild:BatchGetBuilds",
-        "codebuild:ListBuildsForProject",
-        "codebuild:DescribeBuilds"
-      ],
-      Resource = aws_codebuild_project.this.arn
-    },
-    {
-      Sid    = "CloudWatchLogsListAccess",
-      Effect = "Allow",
-      Action = [
-        "logs:DescribeLogGroups"
-      ],
-      Resource = "*"
-    },
-    {
-      Sid    = "CloudWatchLogsReadOnlyAccess",
-      Effect = "Allow",
-      Action = [
-        "logs:GetLogEvents",
-        "logs:DescribeLogStreams"
-      ],
-      Resource = "arn:aws:logs:${data.aws_region.org_west.name}:${data.aws_caller_identity.org_west.account_id}:log-group:/aws/codebuild/${var.codebuild_project_name}:*"
-    }
-  ]
+  value       = module.cicd.codebuild_project_name
 }
 {% endif %}
 {% if vpc %}
 output "vpc_id" {
   description = "The ID of the VPC."
-  value       = aws_vpc.main.id
+  value       = module.vpc_vpn.vpc_id
 }
 
 output "vpc_cidr" {
   description = "The CIDR of the VPC."
-  value       = aws_vpc.main.cidr_block
+  value       = module.vpc_vpn.vpc_cidr
 }
 
 output "subnet_id" {
   description = "The ID of the private subnet."
-  value       = aws_subnet.main.id
+  value       = module.vpc_vpn.subnet_id
 }
 
 output "client_vpn_endpoint_id" {
   description = "The ID of the Client VPN Endpoint."
-  value       = aws_ec2_client_vpn_endpoint.main.id
+  value       = module.vpc_vpn.client_vpn_endpoint_id
+}
+
+output "target_account_id" {
+  description = "The AWS Account ID."
+  value       = var.target_account_id
 }
 
 output "client_vpn_cidr" {
@@ -111,47 +55,32 @@ output "client_vpn_cidr" {
   value       = var.client_vpn_endpoint_client_cidr_block
 }
 
-output "required_permission_set_statements" {
-  description = "A list of IAM policy statements that should be applied to the developer permission set."
-  value = [
-    {
-      Sid    = "AllowVPNConfigDownload",
-      Effect = "Allow",
-      Action = [
-        "ec2:DescribeClientVpnEndpoints",
-        "ec2:ExportClientVpnClientConfiguration"
-      ],
-      Resource = "*"
-    }
-  ]
-}
-
 output "server_certificate_pem" {
   description = "The PEM-encoded server certificate for the Client VPN."
-  value       = tls_locally_signed_cert.server.cert_pem
+  value       = module.vpc_vpn.server_certificate_pem
   sensitive   = true
 }
 
 output "ca_certificate_pem" {
   description = "The PEM-encoded CA certificate for signing client certificates."
-  value       = tls_self_signed_cert.ca.cert_pem
+  value       = module.vpc_vpn.ca_certificate_pem
   sensitive   = true
 }
 
 output "ca_private_key_pem" {
   description = "The PEM-encoded CA private key for signing client certificates."
-  value       = tls_private_key.ca.private_key_pem
+  value       = module.vpc_vpn.ca_private_key_pem
   sensitive   = true
 }
 {% endif %}
 {% if test_webapp %}
 output "webapp_private_ip" {
   description = "The private IP address of the test web app EC2 instance."
-  value       = aws_instance.nginx.private_ip
+  value       = module.test_webapp.webapp_private_ip
 }
 
 output "webapp_instance_id" {
   description = "The ID of the test web app EC2 instance."
-  value       = aws_instance.nginx.id
+  value       = module.test_webapp.webapp_instance_id
 }
 {% endif %}

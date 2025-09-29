@@ -9,6 +9,11 @@ variable "target_account_role_name" {
   type        = string
   default     = "OrganizationAccountAccessRole" # A common default for AWS Organizations. Adjust if your role has a different name.
 }
+
+variable "account_alias" {
+  description = "The short name/alias of the AWS account."
+  type        = string
+}
 {% if cicd %}
 variable "s3_git_bucket_name" {
   description = "Bucket name for S3 remote git repo."
@@ -37,16 +42,6 @@ variable "codeartifact_repository_name" {
 
 variable "codebuild_project_name" {
   description = "The name of the CodeBuild project."
-  type        = string
-}
-
-variable "identitystore_id" {
-  description = "The ID of the IAM Identity Center store."
-  type        = string
-}
-
-variable "iam_output_json_path" {
-  description = "The path to the iam_output.json file."
   type        = string
 }
 {% endif %}
@@ -80,25 +75,10 @@ variable "cert_organization" {
   description = "The organization name for the self-signed certificate."
   type        = string
 }
-{% endif %}
-{% if test_webapp %}
-variable "vpc_id" {
-  description = "The ID of the VPC where the web app will be deployed."
-  type        = string
-}
 
-variable "subnet_id" {
-  description = "The ID of the subnet where the web app will be deployed."
-  type        = string
-}
-
-variable "client_vpn_cidr" {
-  description = "The CIDR block of the Client VPN."
-  type        = string
-}
-
-variable "vpc_cidr" {
-  description = "The CIDR block of the VPC."
-  type        = string
+variable "split_tunnel" {
+  description = "Whether to enable split-tunnel mode for the VPN."
+  type        = bool
+  default     = true
 }
 {% endif %}

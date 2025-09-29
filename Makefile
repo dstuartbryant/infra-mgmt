@@ -43,15 +43,18 @@ ORG_OUTPUT := $(ORG_CONFIG_DIR)/org_output.json
 
 LOGS_DIR := $(TERRAFORM_DIR)/.logs
 
-# Terraform accounts creation mgmt
-ACCOUNTS_DIR := $(TERRAFORM_DIR)/accounts
-
 # Initial IAM user mgmt
 IAM_TF_DIR := $(BUILD_DIR)/iam
 IAM_CONFIG_DIR := $(CONFIG_DIR)/iam
 IAM_CONFIG := $(IAM_CONFIG_DIR)/iam_users.json
 IAM_OUTPUT := $(IAM_CONFIG_DIR)/iam_output.json
 IAM_MODULE := $(MODULES_DIR)/iam_users_groups
+
+# Terraform individual accounts creation mgmt
+ACCOUNTS_DIR := $(BUILD_DIR)/accounts
+LOGS_DIR := $(TERRAFORM_DIR)/.logs
+ALL_ACCOUNT_DIRS := $(shell find $(ACCOUNTS_DIR) -mindepth 1 -maxdepth 1 -type d -not -name '.*' -exec basename {} \;)
+ACCOUNTS_BUILD_OUTPUT_DIR := $(ACCOUNTS_DIR)/.output
 
 # # Terraform org mgmt
 # ORG_DIR := $(TERRAFORM_DIR)/.build/org
@@ -145,41 +148,45 @@ iam-apply:
 	@echo "\n>>> Fetching INIT-IAM output..."
 	terraform -chdir=$(IAM_TF_DIR) output -json > $(IAM_OUTPUT)
 
+
+accounts-config:
+	@echo "\n>>> Configuring Individual Accounts..."
+	python -m infra_mgmt.python.bin.accounts $(USER_CONFIG_DIR) $(MODULES_DIR) $(ORG_OUTPUT) $(ACCOUNTS_DIR) $(IAM_CONFIG)
+
+
+accounts-init:
+	@echo "\n>>> Initializing Individual Accounts..."
+	@mkdir -p $(LOGS_DIR)
+	@for dir in $(ALL_ACCOUNT_DIRS); do \
+		mkdir -p $(LOGS_DIR)/$$dir; \
+		echo "\n>>> Initializing for account: $$dir..."; \
+		(terraform -chdir=$(ACCOUNTS_DIR)/$$dir init -no-color \
+		  -backend-config=$(BACKEND_HCL) \
+		  -backend-config="key=org/$$dir/terraform.tfstate" 2>&1 | tee $(LOGS_DIR)/$$dir/$$dir-init.log); \
+	done
+
 #################### REFACTOR: GOOD TO THIS POINT ###################
 
-# org-config:
-# 	@echo "\n>>> Configuring ORG..."
-# 	python -m infra_mgmt.python.bin.org $(USER_CONFIG_DIR)/config.yaml $(ACCOUNTS_OUTPUT) $(IAM_CONFIG) $(ORG_DIR) 
+accounts-plan:
+	@echo "\n>>> Planning for Individual Accounts..."
+	@for dir in $(ALL_ACCOUNT_DIRS); do \
+		echo "\n>>> Planning for account: $$dir..."; \
+		(terraform -chdir=$(ACCOUNTS_DIR)/$$dir plan -no-color 2>&1 \
+		  | tee $(LOGS_DIR)/$$dir/$$dir-planning.log); \
+	done
 
-# org-init:
-# 	@echo "\n>>> Initializing org environments..."
-# 	@mkdir -p $(LOGS_DIR)
-# 	@for dir in $(ORG_ACCOUNT_DIRS); do \
-# 		mkdir -p $(LOGS_DIR)/$$dir; \
-# 		echo "\n>>> Initializing for account: $$dir..."; \
-# 		(terraform -chdir=$(ORG_DIR)/$$dir init -no-color \
-# 		  -backend-config=$(BACKEND_HCL) \
-# 		  -backend-config="key=org/$$dir/terraform.tfstate" 2>&1 | tee $(LOGS_DIR)/$$dir/$$dir-init.log); \
-# 	done
-
-# org-plan:
-# 	@echo "\n>>> Planning org environments..."
-# 	@for dir in $(ORG_ACCOUNT_DIRS); do \
-# 		echo "\n>>> Planning for account: $$dir..."; \
-# 		(terraform -chdir=$(ORG_DIR)/$$dir plan -no-color 2>&1 \
-# 		  | tee $(LOGS_DIR)/$$dir/$$dir-planning.log); \
-# 	done
-
-# org-apply:
-# 	@echo "\n>>> Applying org environments..."
-# 	@mkdir -p $(ORG_BUILD_OUTPUT_DIR)
-# 	@for dir in $(ORG_ACCOUNT_DIRS); do \
-# 		echo "\n>>> Applying for account: $$dir..."; \
-# 		(terraform -chdir=$(ORG_DIR)/$$dir apply -auto-approve -no-color 2>&1 \
-# 		  | tee $(LOGS_DIR)/$$dir/$$dir-applying.log); \
-# 		echo "\n>>> Fetching outputs for account: $$dir..."; \
-# 		terraform -chdir=$(ORG_DIR)/$$dir output -json > $(ORG_BUILD_OUTPUT_DIR)/$$dir.json; \
-# 	done
+accounts-apply:
+	@echo "\n>>> Applying Individual Accounts..."
+	@mkdir -p $(ACCOUNTS_BUILD_OUTPUT_DIR)
+	@for dir in $(ALL_ACCOUNT_DIRS); do \
+		echo "\n>>> Applying for account: $$dir..."; \
+		(terraform -chdir=$(ACCOUNTS_DIR)/$$dir apply -no-color 2>&1 \
+		  | tee $(LOGS_DIR)/$$dir/$$dir-applying.log); \
+		echo "\n>>> Fetching outputs for account: $$dir..."; \
+		terraform -chdir=$(ACCOUNTS_DIR)/$$dir output -json > $(ACCOUNTS_BUILD_OUTPUT_DIR)/$$dir.json; \
+		break; \
+	done
+# break; \
 
 # org-destroy:
 # 	@echo "\n>>> Destroying org environments..."
@@ -215,7 +222,7 @@ vpn-config:
 
 	ACCOUNT_ALIAS=$(account); \
 	USER_NAME=$(user); \
-	ACCOUNT_DIR=$(ORG_DIR)/$(ACCOUNT_ALIAS); \
+	ACCOUNT_DIR=$(ACCOUNTS_DIR)/$(ACCOUNT_ALIAS); \
 	CERT_DIR=$(TERRAFORM_DIR)/.client_vpn_configs/$(ACCOUNT_ALIAS); \
 	USER_CERT_PATH=$(CERT_DIR)/$(USER_NAME).crt; \
 	USER_KEY_PATH=$(CERT_DIR)/$(USER_NAME).key; \
@@ -229,7 +236,7 @@ vpn-config:
 	if [ ! -f "$${USER_CERT_PATH}" ] || [ ! -f "$${USER_KEY_PATH}" ]; then \
 		echo "ERROR: Certificate or key file not found for user '$${USER_NAME}' in account '$${ACCOUNT_ALIAS}'."; \
 		echo "Searched for: $${USER_CERT_PATH} and $${USER_KEY_PATH}"; \
-		echo "Please ensure 'make org-apply' has been run successfully and the user has 'vpn_access: true'."; \
+		echo "Please ensure 'make accounts-apply' has been run successfully and the user has 'vpn_access: true'."; \
 		exit 1; \
 	f; \
 	\
@@ -275,7 +282,7 @@ vpn-configs-all:
 	for key_file in $$(find $(TERRAFORM_DIR)/.client_vpn_configs -name "*.key"); do \
 		USER_NAME=$$(basename $$key_file .key); \
 		ACCOUNT_ALIAS=$$(basename $$(dirname $$key_file)); \
-		ACCOUNT_DIR=$(ORG_DIR)/$$ACCOUNT_ALIAS; \
+		ACCOUNT_DIR=$(ACCOUNTS_DIR)/$$ACCOUNT_ALIAS; \
 		USER_CERT_PATH=$$(dirname $$key_file)/$$USER_NAME.crt; \
 		OUTPUT_DIR=$$GENERATED_VPN_DIR/$$ACCOUNT_ALIAS; \
 		OVPN_FILE=$$OUTPUT_DIR/$$USER_NAME.ovpn; \
@@ -288,7 +295,7 @@ vpn-configs-all:
 		\
 		if [ -z "$$VPN_ENDPOINT_ID" ] || [ -z "$$ACCOUNT_ID" ]; then \
 			echo "ERROR: Could not fetch required outputs for account '$$ACCOUNT_ALIAS'. Skipping."; \
-			echo "         (Have you run 'make org-apply' since the last configuration change?)"; \
+			echo "         (Have you run 'make accounts-apply' since the last configuration change?)"; \
 			continue; \
 		fi; \
 		\

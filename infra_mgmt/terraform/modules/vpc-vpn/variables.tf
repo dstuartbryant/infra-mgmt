@@ -28,5 +28,11 @@ variable "cert_organization" {
   type        = string
 }
 
+variable "split_tunnel" {
+  description = "Whether to enable split-tunnel mode on the Client VPN Endpoint. When true, only traffic destined for the VPC's CIDR block will be routed through the VPN."
+  type        = bool
+  default     = true
+}
+
 
 

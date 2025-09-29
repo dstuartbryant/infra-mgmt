@@ -79,7 +79,7 @@ output "required_permission_set_statements" {
         "logs:GetLogEvents",
         "logs:DescribeLogStreams"
       ],
-      Resource = "arn:aws:logs:${data.aws_region.org_west.name}:${data.aws_caller_identity.org_west.account_id}:log-group:/aws/codebuild/${var.codebuild_project_name}:*"
+      Resource = "arn:aws:logs:${data.aws_region.org_main.name}:${data.aws_caller_identity.org_main.account_id}:log-group:/aws/codebuild/${var.codebuild_project_name}:*"
     }
   ]
 }
