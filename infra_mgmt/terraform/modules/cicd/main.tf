@@ -4,7 +4,7 @@ terraform {
     aws = {
       source                = "hashicorp/aws"
       version               = "~> 5.0"
-      configuration_aliases = [aws.org_west, aws.identity_center]
+      configuration_aliases = [aws.org_main, aws.identity_center]
     }
     local = {
       source  = "hashicorp/local"
@@ -13,17 +13,17 @@ terraform {
   }
 }
 
-data "aws_caller_identity" "org_west" {
-  provider = aws.org_west
+data "aws_caller_identity" "org_main" {
+  provider = aws.org_main
 }
 
-data "aws_region" "org_west" {
-  provider = aws.org_west
+data "aws_region" "org_main" {
+  provider = aws.org_main
 }
 
 # 1. S3 Bucket for git-remote-s3
 resource "aws_s3_bucket" "git_bucket" {
-  provider = aws.org_west
+  provider = aws.org_main
   bucket   = var.s3_git_bucket_name
   tags = {
     IAMPolicy = "Developer"
@@ -32,12 +32,12 @@ resource "aws_s3_bucket" "git_bucket" {
 
 # 2. SNS Topic for Review Notifications
 resource "aws_sns_topic" "git_review_pushes" {
-  provider = aws.org_west
+  provider = aws.org_main
   name     = "git-review-pushes"
 }
 
 resource "aws_sns_topic_subscription" "email_subscriptions" {
-  provider  = aws.org_west
+  provider  = aws.org_main
   for_each  = toset(var.review_notification_emails)
   topic_arn = aws_sns_topic.git_review_pushes.arn
   protocol  = "email"
@@ -45,12 +45,12 @@ resource "aws_sns_topic_subscription" "email_subscriptions" {
 }
 
 resource "aws_sns_topic" "git_build_status" {
-  provider = aws.org_west
+  provider = aws.org_main
   name     = "git-build-status"
 }
 
 resource "aws_sns_topic_subscription" "build_email_subscriptions" {
-  provider  = aws.org_west
+  provider  = aws.org_main
   for_each  = toset(var.build_notification_emails)
   topic_arn = aws_sns_topic.git_build_status.arn
   protocol  = "email"
@@ -59,19 +59,19 @@ resource "aws_sns_topic_subscription" "build_email_subscriptions" {
 
 # 3. CodeArtifact for storing build packages
 resource "aws_codeartifact_domain" "this" {
-  provider = aws.org_west
+  provider = aws.org_main
   domain   = var.codeartifact_domain_name
 }
 
 resource "aws_codeartifact_repository" "this" {
-  provider   = aws.org_west
+  provider   = aws.org_main
   repository = var.codeartifact_repository_name
   domain     = aws_codeartifact_domain.this.domain
 }
 
 # 4. IAM Role and Policy for CodeBuild
 resource "aws_iam_role" "codebuild_role" {
-  provider = aws.org_west
+  provider = aws.org_main
   name     = "${var.codebuild_project_name}-role"
 
   assume_role_policy = jsonencode({
@@ -89,7 +89,7 @@ resource "aws_iam_role" "codebuild_role" {
 }
 
 resource "aws_iam_policy" "codebuild_policy" {
-  provider = aws.org_west
+  provider = aws.org_main
   name     = "${var.codebuild_project_name}-policy"
 
   policy = jsonencode({
@@ -140,14 +140,14 @@ resource "aws_iam_policy" "codebuild_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "codebuild_policy_attachment" {
-  provider   = aws.org_west
+  provider   = aws.org_main
   role       = aws_iam_role.codebuild_role.name
   policy_arn = aws_iam_policy.codebuild_policy.arn
 }
 
 # 5. CodeBuild Project
 resource "aws_codebuild_project" "this" {
-  provider      = aws.org_west
+  provider      = aws.org_main
   name          = var.codebuild_project_name
   service_role  = aws_iam_role.codebuild_role.arn
   build_timeout = "10" # in minutes
@@ -228,7 +228,7 @@ data "archive_file" "lambda_zip" {
 }
 
 resource "aws_iam_role" "lambda_role" {
-  provider = aws.org_west
+  provider = aws.org_main
   name     = "s3-git-cicd-lambda-role"
 
   assume_role_policy = jsonencode({
@@ -246,7 +246,7 @@ resource "aws_iam_role" "lambda_role" {
 }
 
 resource "aws_iam_policy" "lambda_policy" {
-  provider = aws.org_west
+  provider = aws.org_main
   name     = "s3-git-cicd-lambda-policy"
 
   policy = jsonencode({
@@ -262,8 +262,8 @@ resource "aws_iam_policy" "lambda_policy" {
         Resource = "arn:aws:logs:*:*:*"
       },
       {
-        Action   = "sns:Publish",
-        Effect   = "Allow",
+        Action = "sns:Publish",
+        Effect = "Allow",
         Resource = [
           aws_sns_topic.git_review_pushes.arn,
           aws_sns_topic.git_build_status.arn
@@ -279,13 +279,13 @@ resource "aws_iam_policy" "lambda_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "lambda_policy_attachment" {
-  provider   = aws.org_west
+  provider   = aws.org_main
   role       = aws_iam_role.lambda_role.name
   policy_arn = aws_iam_policy.lambda_policy.arn
 }
 
 resource "aws_lambda_function" "s3_git_handler" {
-  provider         = aws.org_west
+  provider         = aws.org_main
   filename         = data.archive_file.lambda_zip.output_path
   function_name    = "s3-git-cicd-handler"
   role             = aws_iam_role.lambda_role.arn
@@ -296,15 +296,15 @@ resource "aws_lambda_function" "s3_git_handler" {
 
   environment {
     variables = {
-      SNS_TOPIC_ARN          = aws_sns_topic.git_review_pushes.arn
+      SNS_TOPIC_ARN              = aws_sns_topic.git_review_pushes.arn
       SNS_BUILD_STATUS_TOPIC_ARN = aws_sns_topic.git_build_status.arn
-      CODEBUILD_PROJECT_NAME = aws_codebuild_project.this.name
+      CODEBUILD_PROJECT_NAME     = aws_codebuild_project.this.name
     }
   }
 }
 
 resource "aws_lambda_permission" "s3_invoke_lambda" {
-  provider      = aws.org_west
+  provider      = aws.org_main
   statement_id  = "AllowS3Invoke"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.s3_git_handler.arn
@@ -313,7 +313,7 @@ resource "aws_lambda_permission" "s3_invoke_lambda" {
 }
 
 resource "aws_s3_bucket_notification" "bucket_notification" {
-  provider = aws.org_west
+  provider = aws.org_main
   bucket   = aws_s3_bucket.git_bucket.id
 
   lambda_function {
@@ -332,7 +332,7 @@ data "archive_file" "lambda_build_status_zip" {
 }
 
 resource "aws_iam_role" "lambda_build_status_role" {
-  provider = aws.org_west
+  provider = aws.org_main
   name     = "s3-git-build-status-lambda-role"
 
   assume_role_policy = jsonencode({
@@ -350,7 +350,7 @@ resource "aws_iam_role" "lambda_build_status_role" {
 }
 
 resource "aws_iam_policy" "lambda_build_status_policy" {
-  provider = aws.org_west
+  provider = aws.org_main
   name     = "s3-git-build-status-lambda-policy"
 
   policy = jsonencode({
@@ -375,13 +375,13 @@ resource "aws_iam_policy" "lambda_build_status_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "lambda_build_status_policy_attachment" {
-  provider   = aws.org_west
+  provider   = aws.org_main
   role       = aws_iam_role.lambda_build_status_role.name
   policy_arn = aws_iam_policy.lambda_build_status_policy.arn
 }
 
 resource "aws_lambda_function" "build_status_handler" {
-  provider         = aws.org_west
+  provider         = aws.org_main
   filename         = data.archive_file.lambda_build_status_zip.output_path
   function_name    = "s3-git-build-status-handler"
   role             = aws_iam_role.lambda_build_status_role.arn

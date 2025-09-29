@@ -32,9 +32,14 @@ BACKEND_DIR := $(TERRAFORM_DIR)/backend
 BACKEND_OUTPUT := $(BACKEND_DIR)/bootstrap.json
 BACKEND_HCL := $(BACKEND_DIR)/backend.hcl
 
+# Terraform config dir
 CONFIG_DIR := $(TERRAFORM_DIR)/.config
-ACCOUNTS_CONFIG := $(CONFIG_DIR)/accounts.json
-ACCOUNTS_OUTPUT := $(CONFIG_DIR)/accounts_output.json
+
+# Terraform Org dirs
+ORG_TF_DIR := $(TERRAFORM_DIR)//org
+ORG_CONFIG_DIR := $(CONFIG_DIR)/org
+ORG_CONFIG := $(ORG_CONFIG_DIR)/org.json
+ORG_OUTPUT := $(ORG_CONFIG_DIR)/org_output.json
 
 LOGS_DIR := $(TERRAFORM_DIR)/.logs
 
@@ -42,18 +47,19 @@ LOGS_DIR := $(TERRAFORM_DIR)/.logs
 ACCOUNTS_DIR := $(TERRAFORM_DIR)/accounts
 
 # Initial IAM user mgmt
-IAM_DIR := $(BUILD_DIR)/iam
-IAM_CONFIG := $(CONFIG_DIR)/iam_users.json
-IAM_OUTPUT := $(CONFIG_DIR)/iam_output.json
+IAM_TF_DIR := $(BUILD_DIR)/iam
+IAM_CONFIG_DIR := $(CONFIG_DIR)/iam
+IAM_CONFIG := $(IAM_CONFIG_DIR)/iam_users.json
+IAM_OUTPUT := $(IAM_CONFIG_DIR)/iam_output.json
 IAM_MODULE := $(MODULES_DIR)/iam_users_groups
 
-# Terraform org mgmt
-ORG_DIR := $(TERRAFORM_DIR)/.build/org
-ORG_BUILD_OUTPUT_DIR := $(ORG_DIR)/.output
+# # Terraform org mgmt
+# ORG_DIR := $(TERRAFORM_DIR)/.build/org
+# ORG_BUILD_OUTPUT_DIR := $(ORG_DIR)/.output
 
 
-# Get a list of the account-specific directories in the .build/org folder
-ORG_ACCOUNT_DIRS := $(shell find $(ORG_DIR) -mindepth 1 -maxdepth 1 -type d -not -name '.*' -exec basename {} \;)
+# # Get a list of the account-specific directories in the .build/org folder
+# ORG_ACCOUNT_DIRS := $(shell find $(ORG_DIR) -mindepth 1 -maxdepth 1 -type d -not -name '.*' -exec basename {} \;)
 
 
 .PHONY: all show-paths bootstrap backend-init backend-config accounts org
@@ -68,7 +74,7 @@ show-paths:
 # Step 1: Apply bootstrap (creates S3 + DynamoDB backend infra)
 bootstrap:
 	@echo "\n>>> Generating backend terraform.tfvars..."
-	python -m infra_mgmt.python.bin.backend $(USER_CONFIG_DIR)/config.yaml $(BACKEND_DIR)
+	python -m infra_mgmt.python.bin.backend $(USER_CONFIG_DIR) $(MODULES_DIR) $(BACKEND_DIR)
 	@echo "\n>>> Bootstrapping backend..."
 	terraform -chdir=$(BACKEND_DIR) init
 	terraform -chdir=$(BACKEND_DIR) apply -auto-approve
@@ -87,96 +93,110 @@ backend-config: bootstrap
 	@cat $(BACKEND_HCL)
 
 
-accounts-init: backend-config
-	@echo "\n>>> Generating accounts.json..."
-	python -m infra_mgmt.python.bin.accounts $(USER_CONFIG_DIR)/config.yaml $(ACCOUNTS_CONFIG)
-	@echo "\n>>> Initializing for accounts..."
-	terraform -chdir=$(ACCOUNTS_DIR) init \
+org-init: backend-config
+	@echo "\n>>> Generating org.json..."
+	@mkdir -p $(ORG_CONFIG_DIR)
+	python -m infra_mgmt.python.bin.org_generate_accounts $(USER_CONFIG_DIR) $(MODULES_DIR) $(ORG_CONFIG) $(ORG_TF_DIR)
+	@echo "\n>>> Initializing Terraform for ORG..."
+	terraform -chdir=$(ORG_TF_DIR) init \
 	  -backend-config=$(BACKEND_HCL) \
 	  -backend-config="key=accounts/terraform.tfstate"
 
-accounts-plan: 
-	@echo "\n>>> Planning accounts..."
-	terraform -chdir=$(ACCOUNTS_DIR) plan -var-file=$(ACCOUNTS_CONFIG)
 
-accounts-apply: accounts-init
-	@echo "\n>>> Applying accounts..."
-	terraform -chdir=$(ACCOUNTS_DIR) apply -auto-approve -var-file=$(ACCOUNTS_CONFIG)
-	@echo "\n>>> Fetching accounts output..."
-	terraform -chdir=$(ACCOUNTS_DIR) output -json > $(ACCOUNTS_OUTPUT)
+org-plan: 
+	@echo "\n>>> Planning ORG..."
+	terraform -chdir=$(ORG_TF_DIR) plan -var-file=$(ORG_CONFIG)
+
+
+
+org-apply: org-init
+	@echo "\n>>> Applying ORG..."
+	terraform -chdir=$(ORG_TF_DIR) apply -var-file=$(ORG_CONFIG)
+	@echo "\n>>> Fetching ORG output..."
+	terraform -chdir=$(ORG_TF_DIR) output -json > $(ORG_OUTPUT)
 	@echo "Done!"
 
+
+
 iam-config: 
-	@echo "\n>>> Configuring IAM..."
-	python -m infra_mgmt.python.bin.iam $(USER_CONFIG_DIR)/config.yaml $(ACCOUNTS_OUTPUT) $(IAM_CONFIG) $(IAM_DIR) $(IAM_MODULE)
+	@echo "\n>>> Configuring INIT-IAM..."
+	@mkdir -p $(IAM_TF_DIR)
+	python -m infra_mgmt.python.bin.iam $(USER_CONFIG_DIR) $(MODULES_DIR) $(ORG_OUTPUT) $(IAM_CONFIG) $(IAM_TF_DIR) $(IAM_MODULE)
+
 
 
 iam-init: backend-config iam-config
-	@echo "\n>>> Initializing for IAM..."
-	terraform -chdir=$(IAM_DIR) init \
+	@echo "\n>>> Initializing for INIT-IAM..."
+	terraform -chdir=$(IAM_TF_DIR) init \
 	  -backend-config=$(BACKEND_HCL) \
 	  -backend-config="key=init_iam/terraform.tfstate"
 
+
+
 iam-plan: 
-	@echo "\n>>> Planning init-iam..."
-	terraform -chdir=$(IAM_DIR) plan -var-file=$(IAM_CONFIG)
+	@echo "\n>>> Planning INIT-IAM..."
+	terraform -chdir=$(IAM_TF_DIR) plan -var-file=$(IAM_CONFIG)
+
+
 
 iam-apply: 
-	@echo "\n>>> Applying IAM..."
-	terraform -chdir=$(IAM_DIR) apply -auto-approve -var-file=$(IAM_CONFIG)
-	@echo "\n>>> Fetching IAM output..."
-	terraform -chdir=$(IAM_DIR) output -json > $(IAM_OUTPUT)
+	@echo "\n>>> Applying INIT-IAM..."
+	terraform -chdir=$(IAM_TF_DIR) apply -var-file=$(IAM_CONFIG)
+	@echo "\n>>> Fetching INIT-IAM output..."
+	terraform -chdir=$(IAM_TF_DIR) output -json > $(IAM_OUTPUT)
 
-org-config:
-	@echo "\n>>> Configuring ORG..."
-	python -m infra_mgmt.python.bin.org $(USER_CONFIG_DIR)/config.yaml $(ACCOUNTS_OUTPUT) $(IAM_CONFIG) $(ORG_DIR) 
+#################### REFACTOR: GOOD TO THIS POINT ###################
 
-org-init:
-	@echo "\n>>> Initializing org environments..."
-	@mkdir -p $(LOGS_DIR)
-	@for dir in $(ORG_ACCOUNT_DIRS); do \
-		mkdir -p $(LOGS_DIR)/$$dir; \
-		echo "\n>>> Initializing for account: $$dir..."; \
-		(terraform -chdir=$(ORG_DIR)/$$dir init -no-color \
-		  -backend-config=$(BACKEND_HCL) \
-		  -backend-config="key=org/$$dir/terraform.tfstate" 2>&1 | tee $(LOGS_DIR)/$$dir/$$dir-init.log); \
-	done
+# org-config:
+# 	@echo "\n>>> Configuring ORG..."
+# 	python -m infra_mgmt.python.bin.org $(USER_CONFIG_DIR)/config.yaml $(ACCOUNTS_OUTPUT) $(IAM_CONFIG) $(ORG_DIR) 
 
-org-plan:
-	@echo "\n>>> Planning org environments..."
-	@for dir in $(ORG_ACCOUNT_DIRS); do \
-		echo "\n>>> Planning for account: $$dir..."; \
-		(terraform -chdir=$(ORG_DIR)/$$dir plan -no-color 2>&1 \
-		  | tee $(LOGS_DIR)/$$dir/$$dir-planning.log); \
-	done
+# org-init:
+# 	@echo "\n>>> Initializing org environments..."
+# 	@mkdir -p $(LOGS_DIR)
+# 	@for dir in $(ORG_ACCOUNT_DIRS); do \
+# 		mkdir -p $(LOGS_DIR)/$$dir; \
+# 		echo "\n>>> Initializing for account: $$dir..."; \
+# 		(terraform -chdir=$(ORG_DIR)/$$dir init -no-color \
+# 		  -backend-config=$(BACKEND_HCL) \
+# 		  -backend-config="key=org/$$dir/terraform.tfstate" 2>&1 | tee $(LOGS_DIR)/$$dir/$$dir-init.log); \
+# 	done
 
-org-apply:
-	@echo "\n>>> Applying org environments..."
-	@mkdir -p $(ORG_BUILD_OUTPUT_DIR)
-	@for dir in $(ORG_ACCOUNT_DIRS); do \
-		echo "\n>>> Applying for account: $$dir..."; \
-		(terraform -chdir=$(ORG_DIR)/$$dir apply -auto-approve -no-color 2>&1 \
-		  | tee $(LOGS_DIR)/$$dir/$$dir-applying.log); \
-		echo "\n>>> Fetching outputs for account: $$dir..."; \
-		terraform -chdir=$(ORG_DIR)/$$dir output -json > $(ORG_BUILD_OUTPUT_DIR)/$$dir.json; \
-	done
+# org-plan:
+# 	@echo "\n>>> Planning org environments..."
+# 	@for dir in $(ORG_ACCOUNT_DIRS); do \
+# 		echo "\n>>> Planning for account: $$dir..."; \
+# 		(terraform -chdir=$(ORG_DIR)/$$dir plan -no-color 2>&1 \
+# 		  | tee $(LOGS_DIR)/$$dir/$$dir-planning.log); \
+# 	done
 
-org-destroy:
-	@echo "\n>>> Destroying org environments..."
-	@for dir in $(ORG_ACCOUNT_DIRS); do \
-		echo "\n>>> Destroying for account: $$dir..."; \
-		(terraform -chdir=$(ORG_DIR)/$$dir destroy -no-color 2>&1 \
-		  | tee $(LOGS_DIR)/$$dir/$$dir-destroying.log); \
-	done
+# org-apply:
+# 	@echo "\n>>> Applying org environments..."
+# 	@mkdir -p $(ORG_BUILD_OUTPUT_DIR)
+# 	@for dir in $(ORG_ACCOUNT_DIRS); do \
+# 		echo "\n>>> Applying for account: $$dir..."; \
+# 		(terraform -chdir=$(ORG_DIR)/$$dir apply -auto-approve -no-color 2>&1 \
+# 		  | tee $(LOGS_DIR)/$$dir/$$dir-applying.log); \
+# 		echo "\n>>> Fetching outputs for account: $$dir..."; \
+# 		terraform -chdir=$(ORG_DIR)/$$dir output -json > $(ORG_BUILD_OUTPUT_DIR)/$$dir.json; \
+# 	done
 
-iam-destroy: 
-	@echo "\n>>> Destroying IAM..."
-	terraform -chdir=$(IAM_DIR) destroy -var-file=$(IAM_CONFIG)
+# org-destroy:
+# 	@echo "\n>>> Destroying org environments..."
+# 	@for dir in $(ORG_ACCOUNT_DIRS); do \
+# 		echo "\n>>> Destroying for account: $$dir..."; \
+# 		(terraform -chdir=$(ORG_DIR)/$$dir destroy -no-color 2>&1 \
+# 		  | tee $(LOGS_DIR)/$$dir/$$dir-destroying.log); \
+# 	done
 
-accounts-destroy: accounts-init
-	@echo "\n>>> Destroying accounts..."
-	terraform -chdir=$(ACCOUNTS_DIR) destroy -var-file=$(ACCOUNTS_CONFIG)
-	@echo "Done!"
+# iam-destroy: 
+# 	@echo "\n>>> Destroying IAM..."
+# 	terraform -chdir=$(IAM_DIR) destroy -var-file=$(IAM_CONFIG)
+
+# accounts-destroy: accounts-init
+# 	@echo "\n>>> Destroying accounts..."
+# 	terraform -chdir=$(ACCOUNTS_DIR) destroy -var-file=$(ACCOUNTS_CONFIG)
+# 	@echo "Done!"
 
 
 # Step 6 (Option A): Generate VPN config for a single user

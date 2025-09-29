@@ -1,0 +1,104 @@
+variable "target_account_id" {
+  description = "The AWS account ID where the CI/CD resources will be deployed."
+  type        = string
+  # This must be provided for each deployment, e.g., via a .tfvars file or command-line argument.
+}
+
+variable "target_account_role_name" {
+  description = "The name of the IAM role that Terraform will assume in the target account."
+  type        = string
+  default     = "OrganizationAccountAccessRole" # A common default for AWS Organizations. Adjust if your role has a different name.
+}
+{% if cicd %}
+variable "s3_git_bucket_name" {
+  description = "Bucket name for S3 remote git repo."
+  type        = string
+}
+
+variable "review_notification_emails" {
+  description = "A list of email addresses to notify for git pushes to 'review/' branches."
+  type        = list(string)
+}
+
+variable "build_notification_emails" {
+  description = "A list of email addresses to notify for CodeBuild status changes."
+  type        = list(string)
+}
+
+variable "codeartifact_domain_name" {
+  description = "The name of the CodeArtifact domain."
+  type        = string
+}
+
+variable "codeartifact_repository_name" {
+  description = "The name of the CodeArtifact repository."
+  type        = string
+}
+
+variable "codebuild_project_name" {
+  description = "The name of the CodeBuild project."
+  type        = string
+}
+
+variable "identitystore_id" {
+  description = "The ID of the IAM Identity Center store."
+  type        = string
+}
+
+variable "iam_output_json_path" {
+  description = "The path to the iam_output.json file."
+  type        = string
+}
+{% endif %}
+{% if vpc %}
+variable "vpc_cidr_block" {
+  description = "The CIDR block for the VPC."
+  type        = string
+}
+
+variable "subnet_cidr_block" {
+  description = "The CIDR block for the private subnet."
+  type        = string
+}
+
+variable "public_subnet_cidr_block" {
+  description = "The CIDR block for the public subnet (for NAT Gateway)."
+  type        = string
+}
+
+variable "client_vpn_endpoint_client_cidr_block" {
+  description = "The CIDR block for the Client VPN Endpoint."
+  type        = string
+}
+
+variable "cert_common_name" {
+  description = "The common name for the self-signed certificate."
+  type        = string
+}
+
+variable "cert_organization" {
+  description = "The organization name for the self-signed certificate."
+  type        = string
+}
+{% endif %}
+{% if test_webapp %}
+variable "vpc_id" {
+  description = "The ID of the VPC where the web app will be deployed."
+  type        = string
+}
+
+variable "subnet_id" {
+  description = "The ID of the subnet where the web app will be deployed."
+  type        = string
+}
+
+variable "client_vpn_cidr" {
+  description = "The CIDR block of the Client VPN."
+  type        = string
+}
+
+variable "vpc_cidr" {
+  description = "The CIDR block of the VPC."
+  type        = string
+}
+{% endif %}

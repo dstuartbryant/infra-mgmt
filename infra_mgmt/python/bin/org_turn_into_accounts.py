@@ -1,6 +1,6 @@
 import argparse
 
-from ..src.config import generate_individual_org_terraform_account_modules
+from ..src.old_config import generate_individual_org_terraform_account_modules
 
 
 def main(

@@ -1,0 +1,84 @@
+terraform {
+  required_version = ">= 1.13.0"
+  backend "s3" {}
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  alias   = "org_main"
+  region  = "{{ org_main_region }}"
+  profile = "{{ org_main_profile }}"
+
+  assume_role {
+    role_arn = "arn:aws:iam::${var.target_account_id}:role/${var.target_account_role_name}"
+  }
+}
+
+provider "aws" {
+  alias   = "identity_center"
+  region  = "{{ id_center_region }}"
+  profile = "{{ id_center_profile }}"
+}
+
+data "aws_ssoadmin_instances" "this" {
+  provider = aws.identity_center
+}
+
+locals {
+  identity_center_instance_arn = tolist(data.aws_ssoadmin_instances.this.arns)[0]
+  identity_store_id            = tolist(data.aws_ssoadmin_instances.this.identity_store_ids)[0]
+}
+{% if cicd %}
+module "cicd" {
+  source = "../../../modules/cicd"
+
+  providers = {
+    aws.org_main        = aws.org_main
+    aws.identity_center = aws.identity_center
+  }
+
+  s3_git_bucket_name           = var.s3_git_bucket_name
+  review_notification_emails   = var.review_notification_emails
+  build_notification_emails    = var.build_notification_emails
+  codeartifact_domain_name     = var.codeartifact_domain_name
+  codeartifact_repository_name = var.codeartifact_repository_name
+  codebuild_project_name       = var.codebuild_project_name
+  identitystore_id             = local.identity_store_id
+  iam_output_json_path         = "${path.module}/../../../.config/iam_output.json"
+}   
+{% endif %}
+{% if vpc %}
+module "vpc_vpn" {
+  source = "../../../modules/vpc-vpn"
+
+  providers = {
+    aws = aws.org_west
+  }
+
+  vpc_cidr_block                        = var.vpc_cidr_block
+  subnet_cidr_block                     = var.subnet_cidr_block
+  public_subnet_cidr_block              = var.public_subnet_cidr_block
+  client_vpn_endpoint_client_cidr_block = var.client_vpn_endpoint_client_cidr_block
+  cert_common_name                      = var.cert_common_name
+  cert_organization                     = var.cert_organization
+}
+{% endif %}
+{% if test_webapp %}
+module "test_webapp" {
+  source = "../../../modules/test-webapp"
+
+  providers = {
+    aws = aws.org_west
+  }
+
+  vpc_id          = module.vpc_vpn.vpc_id
+  subnet_id       = module.vpc_vpn.subnet_id
+  client_vpn_cidr = module.vpc_vpn.client_vpn_cidr
+  vpc_cidr        = module.vpc_vpn.vpc_cidr
+}
+{% endif %}

@@ -7,8 +7,9 @@ from ..src.config import (
 
 
 def main(
-    local_terraform_user_config_path: str,
-    accounts_output_path: str,
+    local_terraform_user_config_dir_path: str,
+    terraform_modules_dir: str,
+    org_json_path: str,
     iam_json_path: str,
     iam_terraform_dir: str,
     iam_module_path: str,
@@ -19,21 +20,24 @@ def main(
     config files.
 
     Args:
-        local_terraform_user_config_path (str): Path to Terraform user configuration
-            yaml file
-        accounts_output_path (str): Path to Terraform accounts_output.json file.
+        local_terraform_user_config_dir_path (str): Path to Terraform user configuration
+            directory.
+        terraform_modules_dir (str): Path to Terraform module directory
+        org_json_path (str): Path to Terraform org_output.json file.
         iam_json_path (str): Path to iam_users.json config file used with
             Terraform
         iam_terraform_dir (str): Path to root iam Terraform module directory
         iam_module_path (str): Path to iam Terraform (non-root) module
     """
     generate_initial_iam_inputs(
-        config_path=local_terraform_user_config_path,
-        accounts_output_path=accounts_output_path,
+        config_dir_path=local_terraform_user_config_dir_path,
+        tf_modules_dir=terraform_modules_dir,
+        org_json_path=org_json_path,
         initial_iam_json_path=iam_json_path,
     )
     generate_terrafrom_initial_iam_configs(
-        config_path=local_terraform_user_config_path,
+        config_dir_path=local_terraform_user_config_dir_path,
+        tf_modules_dir=terraform_modules_dir,
         initial_iam_terraform_dir=iam_terraform_dir,
         iam_module_path=iam_module_path,
     )
@@ -44,12 +48,16 @@ if __name__ == "__main__":
         description="Generates iam root Terraform module and input variables."
     )
     parser.add_argument(
-        "local_terraform_user_config_path",
-        help="Path to Terraform user configuration yaml file",
+        "local_terraform_user_config_dir_path",
+        help="Path to Terraform user configuration directory",
     )
     parser.add_argument(
-        "accounts_output_path",
-        help="Path to Terraform generated accounts_output.json file",
+        "terraform_modules_dir",
+        help="Path to Terraform modules directory",
+    )
+    parser.add_argument(
+        "org_json_path",
+        help="Path to Terraform generated org_output.json file",
     )
     parser.add_argument(
         "iam_json_path",
@@ -66,8 +74,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     main(
-        args.local_terraform_user_config_path,
-        args.accounts_output_path,
+        args.local_terraform_user_config_dir_path,
+        args.terraform_modules_dir,
+        args.org_json_path,
         args.iam_json_path,
         args.iam_terraform_dir,
         args.iam_module_path,

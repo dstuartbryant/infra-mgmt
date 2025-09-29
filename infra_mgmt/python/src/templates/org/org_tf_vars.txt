@@ -1,0 +1,2 @@
+aws_profile         = "{{ aws_profile_name }}"
+aws_provider_region = "{{ aws_region }}"

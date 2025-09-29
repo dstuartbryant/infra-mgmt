@@ -1,9 +1,39 @@
 """NEW Models."""
 
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional, Union
 
 from pydantic import BaseModel
+
+
+class AwsProfile(BaseModel):
+    """AWS profile model used to set permissions for AWS resource managment"""
+
+    profile: str
+    region: str
+
+
+class AwsProfiles(BaseModel):
+    """Collection of various AWS profiles used with Terraform configs"""
+
+    backend: AwsProfile
+    identity_center: AwsProfile
+    org_main: AwsProfile
+
+
+class BackendVars(BaseModel):
+    """Backend (bootstrap) variables"""
+
+    bucket_name: str
+    dynamodb_table_name: str
+
+
+class HeaderConfigModel(BaseModel):
+    base_email: str
+    org_prefix: str
+    aws_profiles: AwsProfiles
+    backend: BackendVars
+    managed_accounts: List[str]
 
 
 class Name(BaseModel):
@@ -24,26 +54,18 @@ class User(BaseModel):
     vpn_access: bool = False
 
 
-class AwsProfile(BaseModel):
-    """AWS profile model used to set permissions for AWS resource managment"""
-
-    profile: str
-    region: str
-
-
-class AwsProfiles(BaseModel):
-    """Collection of various AWS profiles used with Terraform configs"""
-
-    backend: AwsProfile
-    identity_center: AwsProfile
-    org_west: AwsProfile
+class IamConfigModel(BaseModel):
+    groups: List[str]
+    group_accounts: dict
+    users: List[User]
 
 
-class BackendVars(BaseModel):
-    """Backend (bootstrap) variables"""
+class CicdPackagesConfigModel(BaseModel):
+    python: Optional[List[str]] = None
 
-    bucket_name: str
-    dynamodb_table_name: str
+
+class CICDConfigModel(BaseModel):
+    packages: Optional[CicdPackagesConfigModel] = None
 
 
 class ProjectCidrBlocks(BaseModel):
@@ -86,7 +108,34 @@ class ServerCertificate(BaseModel):
     organization: str
 
 
-class VpnVpc(BaseModel):
+class AccountVpcVpnOctets(BaseModel):
+    vpc_and_subnet: str
+    client: str
+
+
+class VpnVpcConfigModel(BaseModel):
+    vpc_cidr_block: str
+    subnet_cidr_block: str
+    public_subnet_cidr_block: str
+    client_vpn_endpoint_client_cidr_block: str
+    octets: AccountVpcVpnOctets
+
+    @property
+    def client_cidr(self) -> str:
+        """Made this property solely to avoid flake8 line length complaints."""
+        return self.client_vpn_endpoint_client_cidr_block
+
+
+class TestWebAppConfigModel(BaseModel):
+    dummy_field: bool = True
+
+
+class AccountServicesConfig(BaseModel):
+    account_name: str
+    services: List[Union[CICDConfigModel, VpnVpcConfigModel, TestWebAppConfigModel]]
+
+
+class VpcVpnHeaderConfigModel(BaseModel):
     """Models Terraform user configurations for VPN/VPC setup in accounts"""
 
     vpc_cidr_block_base: str
@@ -94,29 +143,27 @@ class VpnVpc(BaseModel):
     public_subnet_cidr_block_base: str
     client_cidr_block_base: str
     server_certificate: ServerCertificate
-    project_octets: dict
 
-    def get_project_cidr_blocks(self, project_name: str) -> ProjectCidrBlocks:
-        for pname, octet_dict in self.project_octets.items():
-            if pname == project_name:
-                return ProjectCidrBlocks(
-                    project_name=pname,
-                    vpc_cidr_block=update_nth_octet_from_base(
-                        self.vpc_cidr_block_base, 2, octet_dict["vpc_and_subnet"]
-                    ),
-                    subnet_cidr_block=update_nth_octet_from_base(
-                        self.subnet_cidr_block, 2, octet_dict["vpc_and_subnet"]
-                    ),
-                    public_subnet_cidr_block=update_nth_octet_from_base(
-                        self.public_subnet_cidr_block_base,
-                        2,
-                        octet_dict["vpc_and_subnet"],
-                    ),
-                    client_vpn_endpoint_client_cidr_block=update_nth_octet_from_base(
-                        self.client_cidr_block_base, 3, octet_dict["client"]
-                    ),
-                )
-        raise ValueError(f"No project named {project_name} found.")
+    def get_project_cidr_blocks(
+        self, acc_octets: AccountVpcVpnOctets
+    ) -> VpnVpcConfigModel:
+        return VpnVpcConfigModel(
+            vpc_cidr_block=update_nth_octet_from_base(
+                self.vpc_cidr_block_base, 2, acc_octets.vpc_and_subnet
+            ),
+            subnet_cidr_block=update_nth_octet_from_base(
+                self.subnet_cidr_block, 2, acc_octets.vpc_and_subnet
+            ),
+            public_subnet_cidr_block=update_nth_octet_from_base(
+                self.public_subnet_cidr_block_base,
+                2,
+                acc_octets.vpc_and_subnet,
+            ),
+            client_vpn_endpoint_client_cidr_block=update_nth_octet_from_base(
+                self.client_cidr_block_base, 3, acc_octets.client
+            ),
+            octets=acc_octets,
+        )
 
 
 class TerraformUserConfig(BaseModel):
@@ -124,15 +171,16 @@ class TerraformUserConfig(BaseModel):
     resources
     """
 
-    base_email: str
-    aws_profiles: AwsProfiles
-    backend: BackendVars
-    projects: List[str]
-    vpn_vpc: VpnVpc
-    groups: List[str]
-    group_accounts: dict
-    unclass_users: List[User]
-    secret_users: List[User]
+    header: HeaderConfigModel
+    iam: IamConfigModel
+    vpc_header: VpcVpnHeaderConfigModel
+    account_services: List[AccountServicesConfig]
+
+    def get_services_for_account(self, account_name: str) -> AccountServicesConfig:
+        for acc_serv in self.account_services:
+            if acc_serv.account_name == account_name:
+                return acc_serv.services
+        raise ValueError(f"No account named {account_name} found in account services.")
 
 
 class Account(BaseModel):

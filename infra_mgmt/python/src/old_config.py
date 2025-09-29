@@ -1,13 +1,11 @@
-"""Configuration module."""
-
 import json
-from os import listdir, makedirs, path
+from os import makedirs, path, rmdir
 from typing import List, Tuple
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
-from .old_models import AccessConfig, Account, Project, Projects
+from .old_models import Account, AccountsList, InitIamParam, TerraformUserConfig
 from .utils import quiet_terraform_output_json, rearrange_quiet_terraform_output_dict
 
 CURR_DIR = path.dirname(path.abspath(__file__))
@@ -16,6 +14,16 @@ TEMPLATES_DIR = path.join(CURR_DIR, "templates")
 
 class ConfigError(Exception):
     pass
+
+
+def config_makedirs(dirpath: str, overwrite: bool) -> None:
+    """Custom version of makedirs method to facilitate overwrites if/when necessary."""
+    if path.isdir(dirpath):
+        if overwrite:
+            rmdir(dirpath)
+            makedirs(dirpath)
+    else:
+        makedirs(dirpath)
 
 
 def split_email(email: str) -> Tuple[str, str]:
@@ -38,86 +46,95 @@ def split_email(email: str) -> Tuple[str, str]:
     return prefix, domain
 
 
-def get_access_config_filepaths(configs_dir: str) -> List[str]:
-    """Finds access config files in user configs dir and returns their absolute
-    filepaths.
-
-    Args:
-        configs_dir (str): Path to user configs dir.
-    """
-    fnames = listdir(configs_dir)
-    access_fnames = [x for x in fnames if "access." in x]
-    return [path.join(configs_dir, x) for x in access_fnames]
-
-
-def load_configs(configs_dir: str) -> Tuple[Projects, List[AccessConfig]]:
+def load_terraform_user_config(config_path: str) -> TerraformUserConfig:
     """Loads user config files and performs cross check validations.
     Args:
-        configs_dir (str): Path to user configs dir.
+        config_path (str): Path to user config yaml file.
 
     Returns:
-        (Projects): Instantiated projects model
-        (List[AccessConfig]): List of instantiated AccessConfig models
+
     """
-    projects_yml = path.join(configs_dir, "projects.yaml")
-    access_ymls = get_access_config_filepaths(configs_dir)
+    config_data = yaml.safe_load(open(config_path, "r"))
+    tuc = TerraformUserConfig(**config_data)
 
-    # Load projects config
-    pconfig = yaml.safe_load(open(projects_yml, "r"))
-    projects = Projects(
-        base_email=pconfig["base_email"],
-        projects=[Project(**x) for x in pconfig["projects"]],
-    )
+    # Cross-check project names and those in group_accounts
+    for group, group_accounts in tuc.group_accounts.items():
+        for acc in group_accounts:
+            if acc not in tuc.projects:
+                raise ValueError(
+                    f"Account {acc} for group {group} not in projects list. Expecting "
+                    f"one of {', '.join(tuc.projects)}"
+                )
 
-    access_configs = []
-    for ay in access_ymls:
-        classification = ay.split("access.")[-1].split(".yaml")[0]
-        ac = AccessConfig(**yaml.safe_load(open(ay, "r")))
-        for user in ac.users:
-            for project in user.projects:
-                configured_project = projects.get_project(project)
-                if classification not in configured_project.classifications:
-                    raise ConfigError(
-                        f"Project {project} does not have a {classification} "
-                        "classification. Possible classifications include: "
-                        f"{", ".join(configured_project.classifications)}"
-                    )
-        access_configs.append(ac)
+    # Cross-check project names and those in vpn_vpc.project_octets, and check for
+    # overlapping octets (should not be any)
+    all_non_client_octets = []
+    all_client_octets = []
+    for project_name, octet_dict in tuc.vpn_vpc.project_octets.items():
+        if project_name not in tuc.projects:
+            raise ValueError(
+                f"Account {acc} in vpn_vpc.project_octets not in projects list. "
+                f"Expecting one of {', '.join(tuc.projects)}"
+            )
+        all_non_client_octets.append(octet_dict["vpc_and_subnet"])
+        all_client_octets.append(octet_dict["client"])
 
-    return projects, access_configs
+        num_non_client_octets = len(all_non_client_octets)
+        num_client_octets = len(all_client_octets)
+
+        non_client_octet_set = set(all_non_client_octets)
+        if len(non_client_octet_set) < num_non_client_octets:
+            raise ValueError(
+                "Non-unique non-client octet numbering found. Project octets must be "
+                "unique to avoid overlapping VPN/VPC CIDR blocks."
+            )
+
+        client_octet_set = set(all_client_octets)
+        if len(client_octet_set) < num_client_octets:
+            raise ValueError(
+                "Non-unique client octet numbering found. Project octets must be "
+                "unique to avoid overlapping VPN/VPC CIDR blocks."
+            )
+
+    # Cross-check user assigned groups to those listed in groups
+    for user in tuc.unclass_users:
+        for grp in user.groups:
+            if grp not in tuc.groups:
+                raise ValueError(
+                    f"Group {grp} for user {user.username} not in groups list. "
+                    f"Expecting one of {', '.join(tuc.groups)}"
+                )
+
+    return tuc
 
 
-def generate_accounts_config(configs_dir: str, accounts_json_path: str) -> Projects:
+def generate_accounts_config(config_path: str, accounts_json_path: str):
     """Generates an accounts configuration dictionary in a format that Terraform
     expects.
 
     Args:
-        configs_dir (str):  Path to user configs dir
+        config_path (str):  Path to user configs yaml file
         accounts_json_path (str): Path to output accounts.json file for use with
             Terraform.
 
     """
-    projects, access_configs = load_configs(configs_dir)
+    tuc = load_terraform_user_config(config_path)
 
-    email_prefix, email_domain = split_email(projects.base_email)
+    email_prefix, email_domain = split_email(tuc.base_email)
     accounts = []
-    for p in projects.projects:
-        for classification in p.classifications:
-            acc_name = f"{p.name}-{classification}"
-            accounts.append(
-                {
-                    "name": acc_name,
-                    "email": f"{email_prefix}+{acc_name}@{email_domain}",
-                }
-            )
+    for p in tuc.projects:
+        accounts.append(
+            {
+                "name": p,
+                "email": f"{email_prefix}+{p}@{email_domain}",
+            }
+        )
     accounts_config = {"accounts": accounts}
     with open(accounts_json_path, "w") as f:
         json.dump(accounts_config, f, indent=4)
 
-    return projects
 
-
-def get_accounts_info(accounts_output_path: str) -> List[Account]:
+def get_accounts_info(accounts_output_path: str) -> AccountsList:
     """Fetches account information, assuming terraform `create_accounts` configs have
     already been applied.
 
@@ -135,85 +152,212 @@ def get_accounts_info(accounts_output_path: str) -> List[Account]:
         info["name"] = name
         accounts.append(Account(**info))
 
-    return accounts
+    return AccountsList(accounts=accounts)
 
 
-def original_generate_terraform_org_configs(
-    accounts_output_path: str, s3_prefix: str, org_terraform_dir: str
-):
-    """Generates a terraform providers file for use with organizational resource
-    management across multiple AWS accounts.
+def generate_initial_iam_inputs(
+    config_path: str, accounts_output_path: str, initial_iam_json_path: str
+) -> None:
+    accounts = get_accounts_info(accounts_output_path)
+    tuc = load_terraform_user_config(config_path)
 
-    NOTE: Original draft of org terrform configs. Assumed only one "root" dir for
-    all accounts.
+    # Update group_accounts by replacing account names with account IDs
+    new_dict = {}
+    for group, group_accounts in tuc.group_accounts.items():
+        new_dict[group] = []
+        for acc_name in group_accounts:
+            acc_id = accounts.get_account_id(acc_name)
+            new_dict[group].append(acc_id)
 
-    Args:
-        accounts_output_path (str): Path to Terraform output JSON file generated from
-            managing accounts
-        s3_prefix (str): A prefix applied to Git remote S3 bucket names to support
-            universally unique bucket names
-        org_terraform_dir (str): Destination folder where providers.tf and main.tf files
-            will be written
+    tuc.group_accounts = new_dict
 
-    """
-    quiet_dict = quiet_terraform_output_json(accounts_output_path)
-    accounts_info = rearrange_quiet_terraform_output_dict(quiet_dict)
-    accounts = []
-    for name, info in accounts_info.items():
-        info["name"] = name
-        accounts.append(Account(**info))
+    # Write IAM config in format expected by Terraform
+    iam_config = {}
+    iam_config["groups"] = tuc.groups
+    iam_config["group_accounts"] = tuc.group_accounts
+    iam_config["users"] = []
+    for user in tuc.unclass_users + tuc.secret_users:
+        user_info = user.model_dump()
+        iam_config["users"].append(user_info)
+
+    iam_config["group_policy_arns"] = {
+        "unclass_admin": ["arn:aws:iam::aws:policy/AdministratorAccess"],
+        "secret_admin": ["arn:aws:iam::aws:policy/AdministratorAccess"],
+    }
+    for group in tuc.groups:
+        if "developer" in group:
+            iam_config["group_policy_arns"][group] = [
+                "arn:aws:iam::aws:policy/AWSCodeArtifactReadOnlyAccess"
+            ]
+    with open(initial_iam_json_path, "w") as f:
+        json.dump(iam_config, f, indent=4)
+
+
+def generate_terrafrom_initial_iam_configs(
+    config_path: str,
+    initial_iam_terraform_dir: str,
+    iam_module_path: str,
+    overwrite: bool = False,
+) -> None:
+
+    tuc = load_terraform_user_config(config_path)
+    config_makedirs(initial_iam_terraform_dir, overwrite)
 
     environment = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
-    template = environment.get_template("accounts_providers.txt")
-    content = template.render(accounts=accounts, prefix=s3_prefix)
+    # Get relative path from `iam_root_path` to `iam_module_path` b/c Terraform
+    # does not allow absolute paths to sources in module blocks
+    rel_path = path.relpath(iam_module_path, initial_iam_terraform_dir)
 
-    providers_output_path = path.join(org_terraform_dir, "providers.tf")
-    with open(providers_output_path, "w", encoding="utf-8") as f:
+    # Write main.tf file
+    template = environment.get_template("iam_main_tf.txt")
+    init_iam_params = InitIamParam(
+        profile=tuc.aws_profiles.identity_center.profile,
+        region=tuc.aws_profiles.identity_center.region,
+        relative_module_path=rel_path,
+    )
+    content = template.render(init_iam=init_iam_params)
+    init_iam_main_path = path.join(initial_iam_terraform_dir, "main.tf")
+    with open(init_iam_main_path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    template = environment.get_template("org_main_tf.txt")
-    content = template.render(accounts=accounts, prefix=s3_prefix)
-
-    main_output_path = path.join(org_terraform_dir, "main.tf")
-    with open(main_output_path, "w", encoding="utf-8") as f:
+    # Write variables.tf
+    template = environment.get_template("iam_variables_tf.txt")
+    content = template.render()
+    init_iam_vars_path = path.join(initial_iam_terraform_dir, "variables.tf")
+    with open(init_iam_vars_path, "w", encoding="utf-8") as f:
         f.write(content)
-    return accounts
+
+    # Write output.tf
+    template = environment.get_template("iam_output_tf.txt")
+    content = template.render()
+    init_iam_out_path = path.join(initial_iam_terraform_dir, "output.tf")
+    with open(init_iam_out_path, "w", encoding="utf-8") as f:
+        f.write(content)
 
 
-def generate_terraform_org_configs(
+def get_review_build_emails_in_account(
+    iam_inputs_path: str, account: Account
+) -> Tuple[List[str], List[str]]:
+
+    emails = []
+    iam_input = json.load(open(iam_inputs_path, "r"))
+    for user in iam_input["users"]:
+        for group in user["groups"]:
+            if "developer" in group:
+                if account.alias.replace("unclassified", "unclass") in group:
+                    emails.append(user["email"])
+    return emails
+
+
+def generate_individual_org_terraform_account_modules(
+    config_path: str,
     accounts_output_path: str,
-    s3_prefix: str,
-    build_dir: str,
+    org_terraform_dir: str,
+    iam_inputs_path: str,
     overwrite: bool = False,
 ):
-    """Generates terraform organization configs.
+    """Generates individual root Terraform modules for each AWS account.
 
-
-    Args:
-        accounts_output_path (str): Path to Terraform output JSON file generated from
-            managing accounts
-        s3_prefix (str): A prefix applied to Git remote S3 bucket names to support
-            universally unique bucket names
-        build_dir (str): Destination folder where providers.tf and main.tf files
-            will be written
-         overwrite (bool, default=False): Whether to overwrite any prexisting directory
-
+    Steps: For each account
+    ------------------------
+    [1] Get account name and create .build/accounts/ sub-dirs for it
+    [2] Extract configs for template variables
+    [3] Create .tf files from templates
+    [4] Create terraform.tfvars (or similar) from configs
     """
 
-    # Fetch and format accounts meta data
-    quiet_dict = quiet_terraform_output_json(accounts_output_path)
-    accounts_info = rearrange_quiet_terraform_output_dict(quiet_dict)
-    accounts = []
-    for name, info in accounts_info.items():
-        info["name"] = name
-        accounts.append(Account(**info))
+    config_makedirs(org_terraform_dir, overwrite)
+    tuc = load_terraform_user_config(config_path)
+    environment = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
-    # Ensure build dir exists/create one
-    makedirs(build_dir, exist_ok=overwrite)
+    accounts = get_accounts_info(accounts_output_path)
+    for acc in accounts.accounts:
+        acc_name = acc.alias
 
-    for account in accounts:
-        makedirs(path.join(build_dir, account.alias), exist_ok=overwrite)
+        # Create account module path and ensure directory exists
+        acc_module_path = path.join(org_terraform_dir, acc_name)
+        config_makedirs(acc_module_path, overwrite)
 
+        # --- Main Configs (main.tf, variables.tf, etc.) ---
+        # Write main.tf file
+        template = environment.get_template("account_main_tf.txt")
+        content = template.render(
+            west_profile=tuc.aws_profiles.org_west.profile,
+            id_center_profile=tuc.aws_profiles.identity_center.profile,
+        )
+        acc_main_path = path.join(acc_module_path, "main.tf")
+        with open(acc_main_path, "w", encoding="utf-8") as f:
+            f.write(content)
 
-# def generate_personnel_confgs()
+        # Write variables.tf
+        template = environment.get_template("account_variables_tf.txt")
+        content = template.render()
+        acc_vars_path = path.join(acc_module_path, "variables.tf")
+        with open(acc_vars_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        # Write output.tf
+        template = environment.get_template("account_output_tf.txt")
+        content = template.render()
+        acc_out_path = path.join(acc_module_path, "output.tf")
+        with open(acc_out_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        # --- TFVARS File ---
+        target_accound_id = acc.account_ids
+        s3_git_bucket_name = f"pulse-{acc.name.lower()}-s3-git-bucket"
+        codeartifact_domain_name = f"pulse-{acc.name.lower()}-ca-domain-1"
+        codeartifact_repository_name = f"pulse-{acc.name.lower()}-ca-repo-1"
+        codebuild_project_name = f"pulse-{acc.name.lower()}-build-1"
+
+        account_cidr_blocks = tuc.vpn_vpc.get_project_cidr_blocks(acc.name)
+
+        emails = get_review_build_emails_in_account(
+            iam_inputs_path=iam_inputs_path, account=acc
+        )
+        template = environment.get_template("account_tfvars.txt")
+        content = template.render(
+            target_accound_id=target_accound_id,
+            s3_git_bucket_name=s3_git_bucket_name,
+            review_notification_emails=emails,
+            build_notification_emails=emails,
+            codeartifact_domain_name=codeartifact_domain_name,
+            codeartifact_repository_name=codeartifact_repository_name,
+            codebuild_project_name=codebuild_project_name,
+            vpc_cidr_block=account_cidr_blocks.vpc_cidr_block,
+            subnet_cidr_block=account_cidr_blocks.subnet_cidr_block,
+            public_subnet_cidr_block=account_cidr_blocks.public_subnet_cidr_block,
+            client_vpn_endpoint_client_cidr_block=account_cidr_blocks.client_cidr,
+            cert_common_name=tuc.vpn_vpc.server_certificate.common_name,
+            cert_organization=tuc.vpn_vpc.server_certificate.organization,
+            account_alias=acc_name,
+        )
+        acc_tfvars_path = path.join(acc_module_path, "terraform.tfvars")
+        with open(acc_tfvars_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        # --- VPN Client Certificate Generation ---
+        # Find all users who have access to this account and have vpn_access enabled
+        vpn_users = []
+        all_users = tuc.unclass_users + tuc.secret_users
+        for user in all_users:
+            if not user.vpn_access:
+                continue
+
+            # Check if any of the user's groups grant access to the current account
+            for group_name in user.groups:
+                if acc.name in tuc.group_accounts.get(group_name, []):
+                    vpn_users.append(user)
+                    break  # User is added, no need to check other groups
+
+        # Write vpn_clients.tf file
+        if vpn_users:
+            template = environment.get_template("account_vpn_clients_tf.txt")
+            content = template.render(
+                vpn_users=vpn_users,
+                account_alias=acc_name,
+            )
+            acc_vpn_clients_path = path.join(acc_module_path, "vpn_clients.tf")
+            with open(acc_vpn_clients_path, "w", encoding="utf-8") as f:
+                f.write(content)
