@@ -144,7 +144,7 @@ iam-plan:
 
 iam-apply: 
 	@echo "\n>>> Applying INIT-IAM..."
-	terraform -chdir=$(IAM_TF_DIR) apply -var-file=$(IAM_CONFIG)
+	terraform -chdir=$(IAM_TF_DIR) apply -auto-approve -var-file=$(IAM_CONFIG)
 	@echo "\n>>> Fetching INIT-IAM output..."
 	terraform -chdir=$(IAM_TF_DIR) output -json > $(IAM_OUTPUT)
 
@@ -180,13 +180,51 @@ accounts-apply:
 	@mkdir -p $(ACCOUNTS_BUILD_OUTPUT_DIR)
 	@for dir in $(ALL_ACCOUNT_DIRS); do \
 		echo "\n>>> Applying for account: $$dir..."; \
-		(terraform -chdir=$(ACCOUNTS_DIR)/$$dir apply -no-color 2>&1 \
+		(terraform -chdir=$(ACCOUNTS_DIR)/$$dir apply -auto-approve -no-color 2>&1 \
 		  | tee $(LOGS_DIR)/$$dir/$$dir-applying.log); \
 		echo "\n>>> Fetching outputs for account: $$dir..."; \
 		terraform -chdir=$(ACCOUNTS_DIR)/$$dir output -json > $(ACCOUNTS_BUILD_OUTPUT_DIR)/$$dir.json; \
-		break; \
 	done
 # break; \
+
+# Capture the second word from the command line, which will be our account name argument
+ACCOUNT_ARG := $(word 2,$(MAKECMDGOALS))
+
+.PHONY: account-plan account-apply
+
+account-plan:
+	@if [ -z "$(ACCOUNT_ARG)" ]; then \
+		echo "ERROR: Account name argument is required."; \
+		echo "Usage: make account-plan <account_name>"; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(ACCOUNTS_DIR)/$(ACCOUNT_ARG)" ]; then \
+		echo "ERROR: Account directory not found: $(ACCOUNTS_DIR)/$(ACCOUNT_ARG)"; \
+		exit 1; \
+	fi
+	@echo "\n>>> Planning for account: $(ACCOUNT_ARG)..."
+	@mkdir -p $(LOGS_DIR)/$(ACCOUNT_ARG)
+	@(terraform -chdir=$(ACCOUNTS_DIR)/$(ACCOUNT_ARG) plan -no-color 2>&1 \
+		| tee $(LOGS_DIR)/$(ACCOUNT_ARG)/$(ACCOUNT_ARG)-planning.log)
+
+account-apply:
+	@if [ -z "$(ACCOUNT_ARG)" ]; then \
+		echo "ERROR: Account name argument is required."; \
+		echo "Usage: make account-apply <account_name>"; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(ACCOUNTS_DIR)/$(ACCOUNT_ARG)" ]; then \
+		echo "ERROR: Account directory not found: $(ACCOUNTS_DIR)/$(ACCOUNT_ARG)"; \
+		exit 1; \
+	fi
+	@echo "\n>>> Applying for account: $(ACCOUNT_ARG)..."
+	@mkdir -p $(ACCOUNTS_BUILD_OUTPUT_DIR)
+	@mkdir -p $(LOGS_DIR)/$(ACCOUNT_ARG)
+	@(terraform -chdir=$(ACCOUNTS_DIR)/$(ACCOUNT_ARG) apply -auto-approve -no-color 2>&1 \
+		| tee $(LOGS_DIR)/$(ACCOUNT_ARG)/$(ACCOUNT_ARG)-applying.log)
+	@echo "\n>>> Fetching outputs for account: $(ACCOUNT_ARG)..."
+	@terraform -chdir=$(ACCOUNTS_DIR)/$(ACCOUNT_ARG) output -json > $(ACCOUNTS_BUILD_OUTPUT_DIR)/$(ACCOUNT_ARG).json
+
 
 # org-destroy:
 # 	@echo "\n>>> Destroying org environments..."

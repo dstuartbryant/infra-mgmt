@@ -680,7 +680,7 @@ def generate_individual_terraform_account_modules(
             ),
             cert_common_name=tuc.vpc_header.server_certificate.common_name,
             cert_organization=tuc.vpc_header.server_certificate.organization,
-            account_alias=acc.alias,
+            account_alias=acc.name,
             cicd=cicd,
             vpc=vpc,
             test_webapp=test_webapp,

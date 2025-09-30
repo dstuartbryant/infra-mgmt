@@ -32,7 +32,7 @@ def main(
     generate_initial_iam_inputs(
         config_dir_path=local_terraform_user_config_dir_path,
         tf_modules_dir=terraform_modules_dir,
-        org_json_path=org_json_path,
+        org_output_path=org_json_path,
         initial_iam_json_path=iam_json_path,
     )
     generate_terrafrom_initial_iam_configs(
