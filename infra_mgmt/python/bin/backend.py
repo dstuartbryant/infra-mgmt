@@ -8,7 +8,7 @@ from ..src.config import load_terraform_user_config
 CURR_DIR = path.dirname(path.abspath(__file__))
 PYTHON_DIR = path.dirname(path.abspath(CURR_DIR))
 SRC_DIR = path.join(PYTHON_DIR, "src")
-TEMPLATES_DIR = path.join(SRC_DIR, "templates")
+TEMPLATES_DIR = path.join(SRC_DIR, "templates", "backend")
 
 
 def main(

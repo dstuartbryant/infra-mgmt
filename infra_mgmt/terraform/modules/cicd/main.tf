@@ -290,7 +290,7 @@ resource "aws_lambda_function" "s3_git_handler" {
   function_name    = "s3-git-cicd-handler"
   role             = aws_iam_role.lambda_role.arn
   handler          = "main.handler"
-  runtime          = "python3.9"
+  runtime          = "python3.12"
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
   timeout          = 30
 
@@ -386,7 +386,7 @@ resource "aws_lambda_function" "build_status_handler" {
   function_name    = "s3-git-build-status-handler"
   role             = aws_iam_role.lambda_build_status_role.arn
   handler          = "main.handler"
-  runtime          = "python3.9"
+  runtime          = "python3.12"
   source_code_hash = data.archive_file.lambda_build_status_zip.output_base64sha256
   timeout          = 30
 
