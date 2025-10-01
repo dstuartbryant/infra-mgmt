@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  {{ config.docker_compose_service_name }}:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    entrypoint: "" # Override the default entrypoint
+    command: tail -f /dev/null # Explicitly set the command to keep it running
+    volumes:
+      - ..:/workspace:cached
+      # Mount the host's AWS config and SSO cache into the container for the root user
+      - ${HOME}/.aws:/root/.aws:cached
+      - ${HOME}/.aws/sso/cache:/root/.aws/sso/cache:cached

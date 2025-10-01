@@ -1,0 +1,30 @@
+[tox]
+env_list = py312, flake8
+isolated_build = true
+
+[testenv]
+description = Run tests with pytest
+# Poetry is now configured globally in the build environment, so we don't need to pass credentials.
+deps = poetry
+skip_install = true
+allowlist_externals = poetry
+commands =
+    poetry install
+    poetry run pytest --cov=src --cov-report=term-missing
+
+[testenv:flake8]
+description = Run the flake8 linter
+skip_install = true
+deps = flake8
+commands = flake8 src tests
+
+[flake8]
+max-line-length = 88
+extend-ignore = E203, W503
+exclude =
+    .tox,
+    .venv,
+    build,
+    dist,
+    .eggs,
+    __pycache__

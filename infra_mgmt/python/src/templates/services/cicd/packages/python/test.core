@@ -1,0 +1,6 @@
+from {{ config.docker_compose_service_name }}.core import add_one
+
+
+def test_add_one():
+    assert add_one(1) == 2
+

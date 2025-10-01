@@ -1,0 +1,75 @@
+{
+    "name": "{{ config.dev_container_name }}",
+    "dockerComposeFile": [
+        "../compose.yaml"
+    ],
+    "service": "{{ config.docker_compose_service_name }}",
+    "workspaceFolder": "/workspace",
+    "forwardPorts": [ ],
+    "shutdownAction": "stopCompose",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "fabiospampinato.vscode-terminals",
+                "ms-python.black-formatter",
+                "ms-python.flake8",
+                "eamodio.gitlens",
+                "ms-python.isort",
+                "yzhang.markdown-all-in-one",
+                "ms-python.vscode-pylance",
+                "ms-python.python",
+                "ms-python.debugpy",
+                "ms-vscode.cpptools",
+                "ms-vscode.cpptools-extension-pack",
+                "ms-vscode.cpptools-themes",
+                "twxs.cmake",
+                "ms-vscode.cmake-tools",
+                "mohsen1.prettify-json"
+            ],
+            "settings": {
+                "[python]": {
+                    "editor.defaultFormatter": "ms-python.black-formatter",
+                    "editor.formatOnSave": true
+                },
+                "black-formatter.args": [
+                    "--line-length=88"
+                ],
+                "flake8.args": [
+                    "--max-line-length=88"
+                ],
+                "editor.rulers": [ 88 ],
+                "workbench.colorCustomizations": {
+                    "terminal.background": "{{ config.terminal_background_color}}",
+                    "terminal.foreground": "#b19591",
+                    "terminal.ansiBlack": "#1D2021",
+                    "terminal.ansiBrightBlack": "#665C54",
+                    "terminal.ansiBrightBlue": "#0D6678",
+                    "terminal.ansiBrightCyan": "#8BA59B",
+                    "terminal.ansiBrightGreen": "#237e02",
+                    "terminal.ansiBrightMagenta": "#8F4673",
+                    "terminal.ansiBrightRed": "#FB543F",
+                    "terminal.ansiBrightWhite": "#FDF4C1",
+                    "terminal.ansiBrightYellow": "#FAC03B",
+                    "terminal.ansiBlue": "#00a1f9",
+                    "terminal.ansiCyan": "#8BA59B",
+                    "terminal.ansiGreen": "#95C085",
+                    "terminal.ansiMagenta": "#8F4673",
+                    "terminal.ansiRed": "#FB543F",
+                    "terminal.ansiWhite": "#A89984",
+                    "terminal.ansiYellow": "#FAC03B"
+                },
+                "terminal.integrated.cursorBlinking": true,
+                "terminal.integrated.enablePersistentSessions": false,
+                "terminal.integrated.persistentSessionReviveProcess": "never",
+                "terminals.autokill": true,
+                "terminals.autorun": true,
+                "terminals.multiplexer": "screen",
+                "terminals.terminals": [ { "name": "DEV", "command": "", "open": true, "focus": true, "shell": "zsh" } ],
+                "remote.containers.persistSession": false,
+                "remote.autoForwardPorts": false
+            }
+        }
+    },
+    "postStartCommand": "bash {{ config.dev_container_name }}/post-start.sh",
+    "remoteUser": "root"
+}

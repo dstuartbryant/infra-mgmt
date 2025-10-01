@@ -77,7 +77,7 @@ show-paths:
 # Step 1: Apply bootstrap (creates S3 + DynamoDB backend infra)
 bootstrap:
 	@echo "\n>>> Generating backend terraform.tfvars..."
-	python -m infra_mgmt.python.bin.backend $(USER_CONFIG_DIR) $(MODULES_DIR) $(BACKEND_DIR)
+	python -m infra_mgmt.python.bin.terraform.backend $(USER_CONFIG_DIR) $(MODULES_DIR) $(BACKEND_DIR)
 	@echo "\n>>> Bootstrapping backend..."
 	terraform -chdir=$(BACKEND_DIR) init
 	terraform -chdir=$(BACKEND_DIR) apply -auto-approve
@@ -99,7 +99,7 @@ backend-config: bootstrap
 org-init: backend-config
 	@echo "\n>>> Generating org.json..."
 	@mkdir -p $(ORG_CONFIG_DIR)
-	python -m infra_mgmt.python.bin.org_generate_accounts $(USER_CONFIG_DIR) $(MODULES_DIR) $(ORG_CONFIG) $(ORG_TF_DIR)
+	python -m infra_mgmt.python.bin.terraform.org_generate_accounts $(USER_CONFIG_DIR) $(MODULES_DIR) $(ORG_CONFIG) $(ORG_TF_DIR)
 	@echo "\n>>> Initializing Terraform for ORG..."
 	terraform -chdir=$(ORG_TF_DIR) init \
 	  -backend-config=$(BACKEND_HCL) \
@@ -124,7 +124,7 @@ org-apply: org-init
 iam-config: 
 	@echo "\n>>> Configuring INIT-IAM..."
 	@mkdir -p $(IAM_TF_DIR)
-	python -m infra_mgmt.python.bin.iam $(USER_CONFIG_DIR) $(MODULES_DIR) $(ORG_OUTPUT) $(IAM_CONFIG) $(IAM_TF_DIR) $(IAM_MODULE)
+	python -m infra_mgmt.python.bin.terraform.iam $(USER_CONFIG_DIR) $(MODULES_DIR) $(ORG_OUTPUT) $(IAM_CONFIG) $(IAM_TF_DIR) $(IAM_MODULE)
 
 
 
@@ -151,7 +151,7 @@ iam-apply:
 
 accounts-config:
 	@echo "\n>>> Configuring Individual Accounts..."
-	python -m infra_mgmt.python.bin.accounts $(USER_CONFIG_DIR) $(MODULES_DIR) $(ORG_OUTPUT) $(ACCOUNTS_DIR) $(IAM_CONFIG)
+	python -m infra_mgmt.python.bin.terraform.accounts $(USER_CONFIG_DIR) $(MODULES_DIR) $(ORG_OUTPUT) $(ACCOUNTS_DIR) $(IAM_CONFIG)
 
 
 accounts-init:

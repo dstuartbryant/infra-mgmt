@@ -1,6 +1,6 @@
 import argparse
 
-from ..src.config import (
+from ...src.terraform.config import (
     generate_initial_iam_inputs,
     generate_terrafrom_initial_iam_configs,
 )

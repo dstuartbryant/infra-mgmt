@@ -3,12 +3,13 @@ from os import path
 
 from jinja2 import Environment, FileSystemLoader
 
-from ..src.config import load_terraform_user_config
+from ...src.terraform.config import load_terraform_user_config
 
 CURR_DIR = path.dirname(path.abspath(__file__))
-PYTHON_DIR = path.dirname(path.abspath(CURR_DIR))
+TERRAFORM_DIR = path.dirname(path.abspath(CURR_DIR))
+PYTHON_DIR = path.dirname(path.abspath(TERRAFORM_DIR))
 SRC_DIR = path.join(PYTHON_DIR, "src")
-TEMPLATES_DIR = path.join(SRC_DIR, "templates", "backend")
+TEMPLATES_DIR = path.join(SRC_DIR, "templates", "terraform", "backend")
 
 
 def main(

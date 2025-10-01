@@ -1,0 +1,59 @@
+#!/bin/bash
+set -e
+
+echo "Configuring Git user details..."
+
+# Configure git with user details from .env file
+if [ -n "$GIT_AUTHOR_NAME" ] && [ -n "$GIT_AUTHOR_EMAIL" ]; then
+  git config --global user.name "$GIT_AUTHOR_NAME"
+  git config --global user.email "$GIT_AUTHOR_EMAIL"
+  echo "Git user name and email have been configured."
+else
+  echo "Warning: GIT_AUTHOR_NAME and/or GIT_AUTHOR_EMAIL are not set in .env file."
+  echo "Git commits will use the default system identity."
+fi
+
+echo "Attempting to configure Poetry for AWS CodeArtifact..."
+
+# Check if AWS_PROFILE is set
+if [ -z "$AWS_PROFILE" ]; then
+  echo "Warning: AWS_PROFILE environment variable is not set."
+  echo "Please set it in dev-container/.env and rebuild the container."
+  # Exit gracefully without erroring, as it might not be a required step for all users.
+  exit 0
+fi
+
+echo "Using AWS Profile: $AWS_PROFILE"
+
+# Define your CodeArtifact details here
+# You will need to replace these placeholders with your actual values.
+CODEARTIFACT_DOMAIN="{{ config.codeartifact.codeartifact_domain }}"
+CODEARTIFACT_DOMAIN_OWNER="{{ config.codeartifact.codeartifact_domain_owner }}"
+CODEARTIFACT_REPOSITORY="{{ config.codeartifact.codeartifact_repo }}"
+CODEARTIFACT_REGION="{{ config.codeartifact.codeartifact_region }}"
+echo "Fetching authorization token from AWS CodeArtifact..."
+
+# Run the AWS CLI command to get the token
+# The AWS_PROFILE variable is automatically used by the AWS CLI.
+export POETRY_HTTP_BASIC_CODEARTIFACT_PASSWORD=$(aws codeartifact get-authorization-token \
+  --domain $CODEARTIFACT_DOMAIN \
+  --domain-owner $CODEARTIFACT_DOMAIN_OWNER \
+  --region $CODEARTIFACT_REGION \
+  --query authorizationToken \
+  --output text)
+
+if [ -z "$POETRY_HTTP_BASIC_CODEARTIFACT_PASSWORD" ]; then
+    echo "Error: Failed to get authorization token from AWS CodeArtifact."
+    echo "Please check your AWS credentials and SSO login status."
+    exit 1
+fi
+
+echo "Successfully fetched token. Configuring Poetry..."
+
+# Configure Poetry to use the token
+poetry config http-basic.codeartifact aws $POETRY_HTTP_BASIC_CODEARTIFACT_PASSWORD
+
+# Export the token so it can be used by other processes, like tox.
+export CODEARTIFACT_AUTH_TOKEN=$POETry_HTTP_BASIC_CODEARTIFACT_PASSWORD
+
+echo "Poetry has been configured to use the AWS CodeArtifact repository."

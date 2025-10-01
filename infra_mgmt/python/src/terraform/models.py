@@ -60,8 +60,13 @@ class IamConfigModel(BaseModel):
     users: List[User]
 
 
+class PythonPackageConfigModel(BaseModel):
+    name: str
+    terminal_background_color: str
+
+
 class CicdPackagesConfigModel(BaseModel):
-    python: Optional[List[str]] = None
+    python: Optional[List[PythonPackageConfigModel]] = None
 
 
 class CICDConfigModel(BaseModel):

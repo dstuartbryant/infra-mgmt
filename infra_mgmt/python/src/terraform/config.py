@@ -22,7 +22,7 @@ from .models import (
 from .utils import quiet_terraform_output_json, rearrange_quiet_terraform_output_dict
 
 CURR_DIR = path.dirname(path.abspath(__file__))
-TEMPLATES_DIR = path.join(CURR_DIR, "templates")
+TEMPLATES_DIR = path.join(CURR_DIR, "..", "templates", "terraform")
 
 
 class ConfigError(Exception):
@@ -356,7 +356,7 @@ def load_terraform_user_config(
 def generate_org_accounts_config(
     config_dir_path: str,
     tf_modules_dir: str,
-    accounts_json_path: str,
+    org_json_path: str,
     tf_org_dir: str,
 ):
     """Generates an accounts configuration dictionary in a format that Terraform
@@ -365,8 +365,7 @@ def generate_org_accounts_config(
     Args:
         config_dir_path (str): Absolute path to user-configurations directory
         tf_modules_dir (str): Absolute path to Terraform modules directory
-        accounts_json_path (str): Path to output accounts.json file for use with
-            Terraform.
+        org_json_path (str): Path to org.json config file
         tf_org_dir (str): Path to Terraform org dir where a terraform.tfvars file will
             be rendered from template and stored
 
@@ -383,7 +382,7 @@ def generate_org_accounts_config(
             }
         )
     accounts_config = {"accounts": accounts}
-    with open(accounts_json_path, "w") as f:
+    with open(org_json_path, "w") as f:
         json.dump(accounts_config, f, indent=4)
 
     environment = Environment(loader=FileSystemLoader(path.join(TEMPLATES_DIR, "org")))

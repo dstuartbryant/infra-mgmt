@@ -23,6 +23,11 @@ output "codebuild_project_name" {
   description = "The name of the CodeBuild project."
   value       = module.cicd.codebuild_project_name
 }
+
+output "codeartifact_region" {
+  description = "The AWS region the CodeArtifact repository is in."
+  value       = module.cicd.codeartifact_region
+}
 {% endif %}
 {% if vpc %}
 output "vpc_id" {

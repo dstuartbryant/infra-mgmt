@@ -1,0 +1,29 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+    commands:
+      - pip install poetry tox twine
+  pre_build:
+    commands:
+      - |
+        echo "Configuring Poetry for CodeArtifact..."
+        CODEARTIFACT_TOKEN=$(aws codeartifact get-authorization-token --domain {{ config.codeartifact.codeartifact_domain }} --domain-owner {{ config.codeartifact.codeartifact_domain_owner }} --query authorizationToken --output text)
+        poetry config http-basic.codeartifact aws $CODEARTIFACT_TOKEN
+  build:
+    commands:
+      - tox
+  post_build:
+    commands:
+      - poetry build
+      - |
+        export TWINE_USERNAME=aws
+        export TWINE_PASSWORD=$(aws codeartifact get-authorization-token --domain {{ config.codeartifact.codeartifact_domain }} --domain-owner {{ config.codeartifact.codeartifact_domain_owner }} --query authorizationToken --output text)
+        export TWINE_REPOSITORY_URL=$(aws codeartifact get-repository-endpoint --domain {{ config.codeartifact.codeartifact_domain }} --repository {{ config.codeartifact.codeartifact_repo }} --format pypi --query repositoryEndpoint --output text)
+        twine upload dist/*
+
+artifacts:
+  files:
+    - dist/**/*

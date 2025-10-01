@@ -18,6 +18,11 @@ output "codeartifact_repository_name" {
   value       = aws_codeartifact_repository.this.repository
 }
 
+output "codeartifact_region" {
+  description = "The AWS region the CodeArtifact repository is in."
+  value       = data.aws_region.org_main
+}
+
 output "codebuild_project_name" {
   description = "The name of the CodeBuild project."
   value       = aws_codebuild_project.this.name
