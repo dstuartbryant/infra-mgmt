@@ -117,7 +117,12 @@ def populate_python_package_contents(
         template = environment.get_template(tf)
         content = template.render(config=template_input)
         content_filename = tf.replace(".jinja2", "")
-        if content_filename in [".env", "compose.yaml", "Dockerfile", "post-start.sh"]:
+        if content_filename in [
+            ".env.template",
+            "compose.yaml",
+            "Dockerfile",
+            "post-start.sh",
+        ]:
             content_dir = dev_container_dir
         elif content_filename in ["devcontainer.json"]:
             content_dir = dot_dev_container_dir
