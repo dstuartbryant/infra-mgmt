@@ -56,13 +56,10 @@ LOGS_DIR := $(TERRAFORM_DIR)/.logs
 ALL_ACCOUNT_DIRS := $(shell find $(ACCOUNTS_DIR) -mindepth 1 -maxdepth 1 -type d -not -name '.*' -exec basename {} \;)
 ACCOUNTS_BUILD_OUTPUT_DIR := $(ACCOUNTS_DIR)/.output
 
-# # Terraform org mgmt
-# ORG_DIR := $(TERRAFORM_DIR)/.build/org
-# ORG_BUILD_OUTPUT_DIR := $(ORG_DIR)/.output
-
-
-# # Get a list of the account-specific directories in the .build/org folder
-# ORG_ACCOUNT_DIRS := $(shell find $(ORG_DIR) -mindepth 1 -maxdepth 1 -type d -not -name '.*' -exec basename {} \;)
+# Services - post Terraform
+SERVICES_DIR := $(INFRA_DIR)/services
+SERVICES_BUILD_DIR := $(SERVICES_DIR)/.build
+PYTHON_PACKAGE_BUILD_DIR := $(SERVICES_BUILD_DIR)/python
 
 
 .PHONY: all show-paths bootstrap backend-init backend-config accounts org
@@ -165,7 +162,7 @@ accounts-init:
 		  -backend-config="key=org/$$dir/terraform.tfstate" 2>&1 | tee $(LOGS_DIR)/$$dir/$$dir-init.log); \
 	done
 
-#################### REFACTOR: GOOD TO THIS POINT ###################
+
 
 accounts-plan:
 	@echo "\n>>> Planning for Individual Accounts..."
@@ -225,6 +222,11 @@ account-apply:
 	@echo "\n>>> Fetching outputs for account: $(ACCOUNT_ARG)..."
 	@terraform -chdir=$(ACCOUNTS_DIR)/$(ACCOUNT_ARG) output -json > $(ACCOUNTS_BUILD_OUTPUT_DIR)/$(ACCOUNT_ARG).json
 
+
+accounts-services-apply:
+	@echo "\n>>> Applying (non-Terraform) CICD package configs for all accounts..."
+	@mkdir -p $(PYTHON_PACKAGE_BUILD_DIR)
+	python -m infra_mgmt.python.bin.services.cicd $(USER_CONFIG_DIR) $(MODULES_DIR) $(ACCOUNTS_BUILD_OUTPUT_DIR) $(PYTHON_PACKAGE_BUILD_DIR) 
 
 # org-destroy:
 # 	@echo "\n>>> Destroying org environments..."

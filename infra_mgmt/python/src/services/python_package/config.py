@@ -23,21 +23,7 @@ RULE 1: If `<git-repo-A>` is a folder in S3 bucket, but there is no `<git-repo-A
     4.2: Otherwise, populate template inputs
     4.3: Create a new dir (real or temp)
     4.4: Render and write templates (adhering to struture) to new dir
-    4.5: Then what?--|
-                     |
- |--------------------
- |
-Need to run:
-
-# - eval $(poetry env activate) or maybe poetry install
-# - git init
-- git remote add origin s3://git-s3-bucket-name
-- git add
-- git commit -m "init commit"
-- git push --set-upstream origin main
-
-
-But if developer wants to download dev-continer zip, what do they do?
+    4.5: Initialize and push git repository
 
 
 """
@@ -51,8 +37,11 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
+from ...terraform.config import load_terraform_user_config
+from ...terraform.models import CICDConfigModel
 from .aws import get_boto3_session, list_codeartifact_packages, list_s3_folders
 from .models import CicdMetadata, PythonPackageInput
+from .utils import generate_pastel_hex
 
 CURR_DIR = path.dirname(path.abspath(__file__))  # python_packages dir
 TEMPLATES_DIR = path.join(
@@ -63,7 +52,7 @@ TEMPLATES_DIR = path.join(
 def get_account_cicd_metadata(
     account_name: str, acc_tf_output_dir: str
 ) -> CicdMetadata:
-    acc_tf_output_path = path.join(acc_tf_output_dir, account_name)
+    acc_tf_output_path = path.join(acc_tf_output_dir, account_name + ".json")
     acc_output = json.load(open(acc_tf_output_path, "r"))
     return CicdMetadata(
         codeartifact_domain=acc_output["codeartifact_domain_name"]["value"],
@@ -81,6 +70,12 @@ def list_git_and_codeartifact_repos(cicd_meta: CicdMetadata, profile: str):
         bucket_name=cicd_meta.git_s3_bucket,
         account_id_to_assume=cicd_meta.codeartifact_domain_owner,
     )
+    pruned_s3_folders = []
+    for f in s3_folders:
+        if f[-1] == "/":
+            pruned_s3_folders.append(f[:-1])
+        else:
+            pruned_s3_folders.append(f)
 
     ca_packs = list_codeartifact_packages(
         profile=profile,
@@ -89,7 +84,7 @@ def list_git_and_codeartifact_repos(cicd_meta: CicdMetadata, profile: str):
         repository=cicd_meta.codeartifact_repo,
         account_id_to_assume=cicd_meta.codeartifact_domain_owner,
     )
-    return s3_folders, ca_packs
+    return pruned_s3_folders, ca_packs
 
 
 def populate_python_package_contents(
@@ -251,3 +246,125 @@ def initialize_and_push_git_repository(
                 " PATH?"
             )
             return
+
+
+def apply_account_cicd_services(
+    ccm: CICDConfigModel,
+    acc_name: str,
+    acc_tf_output_dir: str,
+    profile: str,
+    organization_name: str,
+    organization_email: str,
+    package_build_dir: str,
+):
+
+    tf_cicd_meta = get_account_cicd_metadata(
+        account_name=acc_name, acc_tf_output_dir=acc_tf_output_dir
+    )
+
+    curr_s3_folders, curr_ca_packs = list_git_and_codeartifact_repos(
+        cicd_meta=tf_cicd_meta, profile=profile
+    )
+
+    # Generate preview/plan and check with user
+    do_not_require_init = []
+    require_init = []
+    local_config_packs = []
+    for pack in ccm.packages.python:
+        local_config_packs.append(pack.name)
+        if pack.name in curr_s3_folders:
+            do_not_require_init.append(pack.name)
+        else:
+            require_init.append(pack.name)
+
+    msg = f"\n\n\n----------------------- CICD Plan for Account: {acc_name} ---------"
+    msg += "---------------\n"
+    msg += "Current S3 Folders:\n"
+    msg += "\n".join(curr_s3_folders) + "\n\n"
+
+    msg += "Current CodeArtifact Packages:\n"
+    msg += "\n".join(curr_ca_packs) + "\n\n"
+
+    msg += "Packages in local config:\n"
+    msg += "\n".join(local_config_packs) + "\n\n"
+
+    msg += "DO NOT require initialization:\n"
+    msg += "\n".join(do_not_require_init) + "\n\n"
+
+    msg += "REQUIRE initialization:"
+    if len(require_init) > 0:
+        msg += "\n" + "\n".join(require_init) + "\n\n"
+    else:
+        msg += " None\n\n"
+
+    print(msg)
+
+    if len(require_init) == 0:
+        print("\nNothing to change, skipping.\n")
+    else:
+        expected_input = "yes"
+        user_input = input("Apply CICD plan? (only `yes` is accepted for continuing):")
+        if user_input != expected_input:
+            print("User declined plan application, stopping.")
+        else:
+            # Apply Plan
+            for pack_name in require_init:
+                print(f"Applying plan for package {pack_name}")
+                pack = ccm.get_package_config(name=pack_name)
+                hypen_pack_name = pack.name
+                underscore_pack_name = pack.name.replace("-", "_")
+                pack_build_dir = path.join(package_build_dir, underscore_pack_name)
+                s3_bucket_with_key = f"{tf_cicd_meta.git_s3_bucket}/{hypen_pack_name}"
+                makedirs(pack_build_dir)
+                ppi = PythonPackageInput(
+                    dev_container_name=f"{hypen_pack_name}-dev-container",
+                    docker_compose_service_name=underscore_pack_name,
+                    terminal_background_color=generate_pastel_hex(),
+                    organization_name=organization_name,
+                    organization_email=organization_email,
+                    package_name=hypen_pack_name,
+                    codeartifact=tf_cicd_meta,
+                )
+                populate_python_package_contents(
+                    template_input=ppi, package_destination_folder_path=pack_build_dir
+                )
+                initialize_and_push_git_repository(
+                    directory_path=pack_build_dir,
+                    s3_bucket_with_key=s3_bucket_with_key,
+                    commit_message="automated init commit",
+                    aws_profile=profile,
+                    aws_region=ppi.codeartifact.codeartifact_region,
+                    aws_account_id_to_assume=ppi.codeartifact.codeartifact_domain_owner,
+                )
+
+
+def apply_all_cicd_services(
+    config_dir_path: str,
+    tf_modules_dir: str,
+    acc_tf_output_dir: str,
+    package_build_dir: str,
+):
+    tuc = load_terraform_user_config(
+        config_dir_path=config_dir_path, tf_modules_dir=tf_modules_dir
+    )
+
+    account_services = tuc.account_services
+    for acc_serv in account_services:
+        for service in acc_serv.services:
+            if isinstance(service, CICDConfigModel):
+                if isinstance(service.packages, type(None)):
+                    print(
+                        f"\n{acc_serv.account_name} account does not have defined "
+                        "package configurations, skipping."
+                    )
+                    continue
+                else:
+                    apply_account_cicd_services(
+                        ccm=service,
+                        acc_name=acc_serv.account_name,
+                        acc_tf_output_dir=acc_tf_output_dir,
+                        profile=tuc.header.aws_profiles.identity_center.profile,
+                        organization_name=tuc.header.org_name,
+                        organization_email=tuc.header.org_email,
+                        package_build_dir=package_build_dir,
+                    )

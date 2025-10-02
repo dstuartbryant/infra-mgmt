@@ -238,12 +238,7 @@ def validate_unique_vpc_vpn_octet_assigments(tuc: TerraformUserConfig) -> None:
         for service in acc_serv.services:
             if isinstance(service, VpnVpcConfigModel):
                 vpc_configs_list.append(service.octets)
-    if len(vpc_configs_list) <= 1:
-        print(
-            f"No need to cross-check VPC/VPN octets, found {len(vpc_configs_list)} "
-            "VPC/VPN configs."
-        )
-    else:
+    if len(vpc_configs_list) > 1:
         all_non_client_octets = []
         all_client_octets = []
         for octets in vpc_configs_list:

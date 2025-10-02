@@ -31,6 +31,8 @@ class BackendVars(BaseModel):
 class HeaderConfigModel(BaseModel):
     base_email: str
     org_prefix: str
+    org_name: str
+    org_email: str
     aws_profiles: AwsProfiles
     backend: BackendVars
     managed_accounts: List[str]
@@ -71,6 +73,12 @@ class CicdPackagesConfigModel(BaseModel):
 
 class CICDConfigModel(BaseModel):
     packages: Optional[CicdPackagesConfigModel] = None
+
+    def get_package_config(self, name: str) -> PythonPackageConfigModel:
+        for pack in self.packages.python:
+            if pack.name == name:
+                return pack
+        raise ValueError(f"No package named {name} found")
 
 
 class ProjectCidrBlocks(BaseModel):

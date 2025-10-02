@@ -2,7 +2,7 @@ services:
   terraform:
     build:
       context: ..
-      dockerfile: ./dev-container/Dockerfile
+      dockerfile: ./infra-mgmt-dev-container/Dockerfile
     entrypoint: "" # Override the default entrypoint
     command: tail -f /dev/null # Explicitly set the command to keep it running
     environment:

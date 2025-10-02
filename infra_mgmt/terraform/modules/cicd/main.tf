@@ -397,5 +397,40 @@ resource "aws_lambda_function" "build_status_handler" {
   }
 }
 
+# 7. EventBridge Rule to trigger Lambda on CodeBuild status change
+resource "aws_cloudwatch_event_rule" "codebuild_status_change" {
+  provider      = aws.org_main
+  name          = "codebuild-status-change-rule"
+  description   = "Trigger Lambda on CodeBuild build status change"
+  event_pattern = jsonencode({
+    "source" : ["aws.codebuild"],
+    "detail-type" : ["CodeBuild Build State Change"],
+    "detail" : {
+      "project-name" : [var.codebuild_project_name],
+      "build-status" : [
+        "SUCCEEDED",
+        "FAILED",
+        "STOPPED"
+      ]
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "lambda_build_status" {
+  provider  = aws.org_main
+  rule      = aws_cloudwatch_event_rule.codebuild_status_change.name
+  target_id = "s3-git-build-status-handler-target"
+  arn       = aws_lambda_function.build_status_handler.arn
+}
+
+resource "aws_lambda_permission" "allow_eventbridge_invoke_build_status" {
+  provider      = aws.org_main
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.build_status_handler.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.codebuild_status_change.arn
+}
+
 
 
