@@ -348,3 +348,4 @@ terraform.rc
 generated_vpn_configs/
 
 proto_configs/
+user_configs/

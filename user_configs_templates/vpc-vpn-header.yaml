@@ -1,0 +1,23 @@
+# vpc-vpn-header.yml
+#
+# Defines base VPC/VPN configurations, from which multiple VPC/VPN configurations
+# can be defined without overlapping CIDR addresses. You may not need or care to
+# edit this file
+#
+# If there are no VPC/VPN configurations in any *.services.yaml file, 
+# the configs here are not used.
+#
+#
+
+####################################################################
+# VPC/VPN                                                          #
+# Base CIDR block definitions to be used in any VPC/VPN            #
+# provisions in an account.                                        #
+####################################################################
+vpc_cidr_block_base: 10.0.0.0/16
+subnet_cidr_block: 10.0.1.0/24
+public_subnet_cidr_block_base: 10.0.2.0/24
+client_cidr_block_base: 172.16.0.0/22
+server_certificate:
+  common_name: "" # Defined in header.yaml as `org_alias`
+  organization: "" # Defined in header.yaml as `org_name`

@@ -21,9 +21,16 @@ A core challenge in Terraform is dynamically configuring `provider` blocks, whic
 
 This project solves this by using Python as a pre-processor for Terraform. The `Makefile` orchestrates a workflow where Python scripts read a high-level YAML configuration and generate distinct Terraform root modules for each AWS account in the `.build/` directory. This approach ensures that each account's infrastructure is managed in a completely isolated state, preventing configuration drift or input variable conflicts.
 
+## User Configuration
+
+Configuring your accounts and their resources is done via the templates in the `.user_configs_templates/` dir. Make a copy of this directory and name it `user_configs`, then edit the directory content as needed.
+
+WARNING: If you name the copied directory anything else, you'll need to change the path used in the Makefile, and you'll want to be careful not to commit any of your configs to git.
+
 ## Prerequisites
 
-Ensure your local AWS CLI is configured with credentials for the AWS management account. The scripts and Terraform commands will use these credentials to operate.
+1. Ensure your local AWS CLI is configured with credentials for the AWS management account. The scripts and Terraform commands will use these credentials to operate.
+2. Setup your user configurations
 
 ## Usage Workflow
 

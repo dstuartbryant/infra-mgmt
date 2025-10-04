@@ -1,0 +1,42 @@
+# iam.yml
+#
+# IAM configuration file used for defining groups and users.
+
+###################################################################
+# GROUPS                                                           
+# All permissions are assigned on a group basis.   
+# List all groups here.                
+###################################################################
+groups:
+  - <group-1>
+  - <group-2>
+  - <group-3>
+
+
+###################################################################
+# GROUPS <> ACCOUNTS MAPPING                                       
+# Use this mapping to identify which accounts a defined Group
+# will have access to.                                             
+###################################################################
+group_accounts:
+  Shared-U-Developer: ["<Account-1>"]
+  DemoMission1-U-Developer: ["<Account-2>"]
+  DemoMission1-S-Developer: ["<Account-3>"]
+  Admin-All: ["<Account-1>", "<Account-2>", "<Account-3>"]
+
+
+###################################################################
+# USERS                                                            
+# Define IAM users, identify their group memberships, and whether  
+# they have VPN access or not.                                     
+###################################################################
+users:
+  - display_name: <display-name>
+    user_name: <user-name>
+    name:
+      given_name: <first-name>
+      family_name: <last-name>
+    email: "<email>"
+    groups: ["<group-1>"]
+    vpn_access: true
+  

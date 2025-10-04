@@ -16,7 +16,7 @@
 MAKEFILE_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
 # User configs dir
-USER_CONFIG_DIR := $(MAKEFILE_DIR)/proto_configs
+USER_CONFIG_DIR := $(MAKEFILE_DIR)/user_configs
 PROJECTS_CONFIG := $(USER_CONFIG_DIR)/projects.yaml
 
 # "Package" dir

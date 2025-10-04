@@ -1,0 +1,79 @@
+# header.yml
+#
+# Top-level configuration file.
+
+
+###################################################################
+# BASE EMAIL ADDRESS & ORGANIZATION INFO  
+# 
+# Base Email Address:                         
+# This email address is used with plus-addressing (sub-addressing) 
+# so any AWS account created will have the required unique email   
+# address assigned to it.     
+#
+# Organization Info:
+#   - org_name: Full organization name - typically used in software License templates
+#   - org_email: Organization email to be used with Git configurations
+#   - org_alias: An alias use for configs
+#   - org_prefix: A common prefix that is sometimes added to resource names to enforce
+#       uniqueness.
+#                   
+###################################################################
+base_email: <name@example.com>
+
+org_name: <organization-full-name>
+org_alias: <organization-alias>
+org_email: <organization-email-address>
+org_prefix: <organization-prefix>
+
+###################################################################
+# AWS PROFILES                                                     
+#                                                                  
+# NOTE: All of these profiles can be the same, but may need to     
+# differ based on how an organization's management account was     
+# setup.                                                          
+#                                                                  
+# Backend: This profile is used to manage the remote Terraform     
+# backend tools (S3 bucket, DynamoDB Table) that store the states  
+# of Terraform projects managed in this tool.                      
+#                                                                  
+# Identity Center: This profile is used for managing IAM features, 
+# e.g., users, groups, permissions. Sometimes the region and/or    
+# profile name differ from other resources.                        
+#                                                                  
+# Organization (Org) Main: Mainly used for determining which AWS   
+# region the majority of an organization's resources will be       
+# provisioned.                                                     
+###################################################################
+aws_profiles:
+  backend:
+    profile: <profile-name-A>
+    region: <profile-region-A>
+  identity_center:
+    profile: <profile-name-B>
+    region: <profile-region-B>
+  org_main:
+    profile: <profile-name-C>
+    region: <profile-region-C>
+
+
+###################################################################
+# TERRAFORM BACKEND VARIABLES                                      
+# Defines the S3 bucket and DynamoDB table names used for storing  
+# Terraform states remotely.                                       
+###################################################################
+backend:
+  bucket_name: <terraform-backend-bucket-name>
+  dynamodb_table_name: <terraform-backend-dynamodb-table-name>
+
+
+###################################################################
+# MANAGED ACCOUNTS                                                 
+# Defines the names of each managed AWS account. Lower level       
+# configuration files will reference and configuration processes   
+# will cross-check/cross-validate these names.                     
+###################################################################
+managed_accounts:
+  - <Account-1>
+  - <Account-2>
+  - <Account-3>

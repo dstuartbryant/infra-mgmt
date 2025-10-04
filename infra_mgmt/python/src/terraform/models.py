@@ -32,6 +32,7 @@ class HeaderConfigModel(BaseModel):
     base_email: str
     org_prefix: str
     org_name: str
+    org_alias: str
     org_email: str
     aws_profiles: AwsProfiles
     backend: BackendVars
@@ -188,6 +189,11 @@ class TerraformUserConfig(BaseModel):
     iam: IamConfigModel
     vpc_header: VpcVpnHeaderConfigModel
     account_services: List[AccountServicesConfig]
+
+    def model_post_init(self, context):
+        self.vpc_header.server_certificate.organization = self.header.org_name
+        self.vpc_header.server_certificate.common_name = self.header.org_alias
+        return super().model_post_init(context)
 
     def get_services_for_account(self, account_name: str) -> AccountServicesConfig:
         for acc_serv in self.account_services:
