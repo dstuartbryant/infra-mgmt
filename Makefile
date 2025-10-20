@@ -74,9 +74,9 @@ show-paths:
 bootstrap:
 	@echo "\n>>> Generating backend terraform.tfvars..."
 	python -m infra_mgmt.python.bin.terraform.backend $(USER_CONFIG_DIR) $(MODULES_DIR) $(BACKEND_DIR)
-	@echo "\n>>> Bootstrapping backend..."
-	terraform -chdir=$(BACKEND_DIR) init
-	terraform -chdir=$(BACKEND_DIR) apply -auto-approve
+# 	@echo "\n>>> Bootstrapping backend..."
+# 	terraform -chdir=$(BACKEND_DIR) init
+# 	terraform -chdir=$(BACKEND_DIR) apply -auto-approve
 
 
 # Step 2: Generate backend.hcl file from bootstrap outputs
@@ -92,7 +92,23 @@ backend-config: bootstrap
 	@cat $(BACKEND_HCL)
 
 
-org-init: backend-config
+# Step 2a: Pull backend config from terraform.tfvars if backend already exists
+.PHONY: pull-backend-config
+pull-backend-config:
+	@echo "\n>>> Generating backend terraform.tfvars..."
+	python -m infra_mgmt.python.bin.terraform.backend $(USER_CONFIG_DIR) $(MODULES_DIR) $(BACKEND_DIR)
+	@echo "\n>>> Generating backend.hcl from terraform.tfvars..."
+	@cat > $(BACKEND_HCL) <<EOF
+	bucket         = "$$(grep bucket_name $(BACKEND_DIR)/terraform.tfvars | cut -d '=' -f 2 | tr -d ' "')"
+	dynamodb_table = "$$(grep dynamodb_table_name $(BACKEND_DIR)/terraform.tfvars | cut -d '=' -f 2 | tr -d ' "')"
+	region         = "$$(grep aws_provider_region $(BACKEND_DIR)/terraform.tfvars | cut -d '=' -f 2 | tr -d ' "')"
+	profile        = "$$(grep aws_profile $(BACKEND_DIR)/terraform.tfvars | cut -d '=' -f 2 | tr -d ' "')"
+	EOF
+	@echo "backend.hcl created:"
+	@cat $(BACKEND_HCL)
+
+
+org-init: #backend-config
 	@echo "\n>>> Generating org.json..."
 	@mkdir -p $(ORG_CONFIG_DIR)
 	python -m infra_mgmt.python.bin.terraform.org_generate_accounts $(USER_CONFIG_DIR) $(MODULES_DIR) $(ORG_CONFIG) $(ORG_TF_DIR)
@@ -100,6 +116,19 @@ org-init: backend-config
 	terraform -chdir=$(ORG_TF_DIR) init \
 	  -backend-config=$(BACKEND_HCL) \
 	  -backend-config="key=accounts/terraform.tfstate"
+
+org-reinit:
+	@echo "\n>>> Generating org.json..."
+	@mkdir -p $(ORG_CONFIG_DIR)
+	python -m infra_mgmt.python.bin.terraform.org_generate_accounts $(USER_CONFIG_DIR) $(MODULES_DIR) $(ORG_CONFIG) $(ORG_TF_DIR)
+	@echo "\n>>> Initializing Terraform for ORG..."
+	terraform -chdir=$(ORG_TF_DIR) init \
+	  -reconfigure \
+	  -backend-config=$(BACKEND_HCL) \
+	  -backend-config="key=accounts/terraform.tfstate"
+	@echo "\n>>> Fetching ORG output..."
+	terraform -chdir=$(ORG_TF_DIR) output -json > $(ORG_OUTPUT)
+	@echo "Done!"
 
 
 org-plan: 
@@ -131,7 +160,14 @@ iam-init: backend-config iam-config
 	  -backend-config=$(BACKEND_HCL) \
 	  -backend-config="key=init_iam/terraform.tfstate"
 
-
+iam-reinit: iam-config
+	@echo "\n>>> Initializing for INIT-IAM..."
+	terraform -chdir=$(IAM_TF_DIR) init \
+	  -reconfigure \
+	  -backend-config=$(BACKEND_HCL) \
+	  -backend-config="key=init_iam/terraform.tfstate"
+	@echo "\n>>> Fetching INIT-IAM output..."
+	terraform -chdir=$(IAM_TF_DIR) output -json > $(IAM_OUTPUT)
 
 iam-plan: 
 	@echo "\n>>> Planning INIT-IAM..."
@@ -162,7 +198,19 @@ accounts-init:
 		  -backend-config="key=org/$$dir/terraform.tfstate" 2>&1 | tee $(LOGS_DIR)/$$dir/$$dir-init.log); \
 	done
 
-
+accounts-reinit:
+	@echo "\n>>> Re-initializing Individual Accounts..."
+	@mkdir -p $(LOGS_DIR)
+	@for dir in $(ALL_ACCOUNT_DIRS); do \
+		mkdir -p $(LOGS_DIR)/$$dir; \
+		echo "\n>>> Re-initializing for account: $$dir..."; \
+		(terraform -chdir=$(ACCOUNTS_DIR)/$$dir init -no-color \
+		  -reconfigure \
+		  -backend-config=$(BACKEND_HCL) \
+		  -backend-config="key=org/$$dir/terraform.tfstate" 2>&1 | tee $(LOGS_DIR)/$$dir/$$dir-init.log); \
+		echo "\n>>> Fetching outputs for account: $$dir..."; \
+		terraform -chdir=$(ACCOUNTS_DIR)/$$dir output -json > $(ACCOUNTS_BUILD_OUTPUT_DIR)/$$dir.json; \
+	done
 
 accounts-plan:
 	@echo "\n>>> Planning for Individual Accounts..."

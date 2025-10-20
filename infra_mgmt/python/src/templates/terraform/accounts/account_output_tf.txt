@@ -55,6 +55,10 @@ output "codeartifact_region" {
   value       = module.cicd.codeartifact_region
 }
     {% endif %}
+output "target_account_id" {
+  description = "The AWS Account ID."
+  value       = var.target_account_id
+}
 {% endif %}
 {% if vpc %}
 output "vpc_id" {

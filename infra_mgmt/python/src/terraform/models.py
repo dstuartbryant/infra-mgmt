@@ -72,6 +72,7 @@ class PythonPackageConfigModel(BaseModel):
 class CicdPackagesConfigModel(BaseModel):
     python: Optional[List[PythonPackageConfigModel]] = None
 
+
 class CicdGithubConfigModel(BaseModel):
     owner: str
     repos: List[str]
@@ -85,6 +86,7 @@ class CicdGithubConfigModel(BaseModel):
         for rp in self.repos:
             out[rp] = f"{self.owner}/{rp}"
         return out
+
 
 class CICDConfigModel(BaseModel):
     git: Literal["S3", "GitHub"]
