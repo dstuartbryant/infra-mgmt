@@ -292,12 +292,13 @@ def validate_iam(tuc: TerraformUserConfig, iam: IamConfigModel) -> None:
             )
 
     # 2. Account names in group <> accounts map match those listed in header.yaml
+    header_acc_names = list(tuc.header.managed_accounts.keys())
     for group, group_accounts in iam.group_accounts.items():
         for acc in group_accounts:
-            if acc not in tuc.header.managed_accounts:
+            if acc not in header_acc_names:
                 raise ConfigError(
                     f"Account {acc} for group {group} not in managed-accounts list. "
-                    f"Expecting one of {', '.join(tuc.header.managed_accounts)}"
+                    f"Expecting one of {', '.join(header_acc_names)}"
                 )
 
     # 3. Group names assigned to users match those in groups list
@@ -369,13 +370,25 @@ def generate_org_accounts_config(
 
     email_prefix, email_domain = split_email(tuc.header.base_email)
     accounts = []
+
     for p in tuc.header.managed_accounts:
-        accounts.append(
-            {
-                "name": p,
-                "email": f"{email_prefix}+{p}@{email_domain}",
-            }
-        )
+        if tuc.header.managed_accounts[p]:
+            if "email" in tuc.header.managed_accounts[p].keys():
+                accounts.append(
+                    {
+                        "name": p,
+                        "email": f"{tuc.header.managed_accounts[p]["email"]}",
+                        "parent_id": f"{tuc.header.parent_id}",
+                    }
+                )
+        else:
+            accounts.append(
+                {
+                    "name": p,
+                    "email": f"{email_prefix}+{p}@{email_domain}",
+                    "parent_id": f"{tuc.header.parent_id}",
+                }
+            )
     accounts_config = {"accounts": accounts}
     with open(org_json_path, "w") as f:
         json.dump(accounts_config, f, indent=4)
@@ -590,12 +603,17 @@ def generate_individual_terraform_account_modules(
 
         # --- Main Configs (main.tf, variables.tf, etc.) ---
         cicd = False
+        git_type = None
+        github = None
         vpc = False
         test_webapp = False
         services = tuc.get_services_for_account(acc.name)
         for service in services:
             if isinstance(service, CICDConfigModel):
                 cicd = True
+                git_type = service.git
+                if git_type == "GitHub":
+                    github = service.github
             if isinstance(service, VpnVpcConfigModel):
                 vpc = True
                 vpc_config = service
@@ -610,6 +628,7 @@ def generate_individual_terraform_account_modules(
             id_center_region=tuc.header.aws_profiles.identity_center.region,
             id_center_profile=tuc.header.aws_profiles.identity_center.profile,
             cicd=cicd,
+            git_type=git_type,
             vpc=vpc,
             test_webapp=test_webapp,
         )
@@ -621,6 +640,7 @@ def generate_individual_terraform_account_modules(
         template = environment.get_template("account_variables_tf.txt")
         content = template.render(
             cicd=cicd,
+            git_type=git_type,
             vpc=vpc,
             test_webapp=test_webapp,
         )
@@ -632,6 +652,7 @@ def generate_individual_terraform_account_modules(
         template = environment.get_template("account_output_tf.txt")
         content = template.render(
             cicd=cicd,
+            git_type=git_type,
             vpc=vpc,
             test_webapp=test_webapp,
         )
@@ -676,6 +697,8 @@ def generate_individual_terraform_account_modules(
             cert_organization=tuc.vpc_header.server_certificate.organization,
             account_alias=acc.name,
             cicd=cicd,
+            git_type=git_type,
+            github=github,
             vpc=vpc,
             test_webapp=test_webapp,
         )

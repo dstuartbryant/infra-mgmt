@@ -13,3 +13,8 @@ output "region" {
 output "profile" {
   value = var.aws_profile
 }
+
+output "aws_account_id" {
+  description = "The AWS account ID that the provider is configured to use."
+  value       = data.aws_caller_identity.current.account_id
+}

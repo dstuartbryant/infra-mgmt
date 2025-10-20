@@ -68,12 +68,26 @@ backend:
 
 
 ###################################################################
-# MANAGED ACCOUNTS                                                 
+# MANAGED ACCOUNTS     
+#
+# PARENT ID: AWS Organizations parent account ID
+#                                            
+# Managed Accounts:
 # Defines the names of each managed AWS account. Lower level       
 # configuration files will reference and configuration processes   
 # will cross-check/cross-validate these names.                     
+#
+#   If `email` is configured, e.g.,
+#
+#       managed_accounts:
+#         <account-name>:
+#           email: <account-email>
+#
+#   then that email is used instead of automatically generating
+#   one from the `base_email` field.
 ###################################################################
 managed_accounts:
-  - <Account-1>
-  - <Account-2>
-  - <Account-3>
+  <Account-1>:
+    email: <some-email>
+  <Account-2>:
+  <Account-3>:

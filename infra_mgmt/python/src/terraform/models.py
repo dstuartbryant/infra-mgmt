@@ -1,7 +1,7 @@
 """NEW Models."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import List, Literal, Optional, Union
 
 from pydantic import BaseModel
 
@@ -36,7 +36,8 @@ class HeaderConfigModel(BaseModel):
     org_email: str
     aws_profiles: AwsProfiles
     backend: BackendVars
-    managed_accounts: List[str]
+    parent_id: str
+    managed_accounts: dict
 
 
 class Name(BaseModel):
@@ -71,8 +72,23 @@ class PythonPackageConfigModel(BaseModel):
 class CicdPackagesConfigModel(BaseModel):
     python: Optional[List[PythonPackageConfigModel]] = None
 
+class CicdGithubConfigModel(BaseModel):
+    owner: str
+    repos: List[str]
+    codestar_arn: str
+    codebuild_project_prefix: str
+    branch: str = "main"
+
+    @property
+    def repositories(self) -> dict:
+        out = {}
+        for rp in self.repos:
+            out[rp] = f"{self.owner}/{rp}"
+        return out
 
 class CICDConfigModel(BaseModel):
+    git: Literal["S3", "GitHub"]
+    github: Optional[CicdGithubConfigModel] = None
     packages: Optional[CicdPackagesConfigModel] = None
 
     def get_package_config(self, name: str) -> PythonPackageConfigModel:

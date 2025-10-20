@@ -23,4 +23,5 @@ module "account" {
   for_each      = { for acc in var.accounts : acc.name => acc }
   account_name  = each.value.name
   account_email = each.value.email
+  parent_id     = each.value.parent_id
 }

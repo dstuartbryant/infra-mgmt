@@ -1,4 +1,5 @@
 {% if cicd %}
+    {% if git_type == "S3" %}
 output "s3_git_bucket_name" {
   description = "Bucket name for S3 remote git repo."
   value       = module.cicd.s3_git_bucket_name
@@ -7,6 +8,11 @@ output "s3_git_bucket_name" {
 output "s3_git_bucket_arn" {
   description = "ARN for S3 git bucket"
   value       = module.cicd.s3_git_bucket_arn
+}
+
+output "codebuild_project_name" {
+  description = "The name of the CodeBuild project."
+  value       = module.cicd.codebuild_project_name
 }
 
 output "codeartifact_domain_name" {
@@ -19,15 +25,36 @@ output "codeartifact_repository_name" {
   value       = module.cicd.codeartifact_repository_name
 }
 
-output "codebuild_project_name" {
-  description = "The name of the CodeBuild project."
-  value       = module.cicd.codebuild_project_name
+output "codeartifact_region" {
+  description = "The AWS region the CodeArtifact repository is in."
+  value       = module.cicd.codeartifact_region
+}
+    {% elif git_type == "GitHub" %}
+output "codebuild_project_names" {
+  description = "A map of repository names to CodeBuild project names."
+  value       = module.cicd.codebuild_project_names
+}
+
+output "codepipeline_names" {
+  description = "A map of repository names to CodePipeline names."
+  value       = module.cicd.codepipeline_names
+}
+
+output "codeartifact_domain_name" {
+  description = "The name of the CodeArtifact domain."
+  value       = module.cicd.codeartifact_domain_name
+}
+
+output "codeartifact_repository_name" {
+  description = "The name of the CodeArtifact repository."
+  value       = module.cicd.codeartifact_repository_name
 }
 
 output "codeartifact_region" {
   description = "The AWS region the CodeArtifact repository is in."
   value       = module.cicd.codeartifact_region
 }
+    {% endif %}
 {% endif %}
 {% if vpc %}
 output "vpc_id" {

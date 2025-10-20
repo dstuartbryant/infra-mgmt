@@ -9,9 +9,10 @@ variable "aws_profile" {
 }
 
 variable "accounts" {
-  description = "List of accounts with name and email"
+  description = "List of accounts with name, email, and optional parent_id"
   type = list(object({
-    name  = string
-    email = string
+    name      = string
+    email     = string
+    parent_id = optional(string)
   }))
 }

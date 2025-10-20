@@ -17,7 +17,6 @@ MAKEFILE_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
 # User configs dir
 USER_CONFIG_DIR := $(MAKEFILE_DIR)/user_configs
-PROJECTS_CONFIG := $(USER_CONFIG_DIR)/projects.yaml
 
 # "Package" dir
 INFRA_DIR := $(MAKEFILE_DIR)/infra_mgmt
@@ -36,7 +35,7 @@ BACKEND_HCL := $(BACKEND_DIR)/backend.hcl
 CONFIG_DIR := $(TERRAFORM_DIR)/.config
 
 # Terraform Org dirs
-ORG_TF_DIR := $(TERRAFORM_DIR)//org
+ORG_TF_DIR := $(TERRAFORM_DIR)/org
 ORG_CONFIG_DIR := $(CONFIG_DIR)/org
 ORG_CONFIG := $(ORG_CONFIG_DIR)/org.json
 ORG_OUTPUT := $(ORG_CONFIG_DIR)/org_output.json
@@ -121,6 +120,7 @@ org-apply: org-init
 iam-config: 
 	@echo "\n>>> Configuring INIT-IAM..."
 	@mkdir -p $(IAM_TF_DIR)
+	@mkdir -p $(IAM_CONFIG_DIR)
 	python -m infra_mgmt.python.bin.terraform.iam $(USER_CONFIG_DIR) $(MODULES_DIR) $(ORG_OUTPUT) $(IAM_CONFIG) $(IAM_TF_DIR) $(IAM_MODULE)
 
 

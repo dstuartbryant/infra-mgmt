@@ -66,7 +66,7 @@
                 "terminals.autokill": true,
                 "terminals.autorun": true,
                 "terminals.multiplexer": "screen",
-                "terminals.terminals": [ { "name": "IM Terminal", "command": "", "open": true, "focus": true, "shell": "bash" }, { "name": "Gemini", "command": "", "open": true, "focus": false, "shell": "bash" } ],
+                "terminals.terminals": [ { "name": "IM Terminal", "command": "", "open": true, "focus": true, "shell": "zsh" }, { "name": "Gemini", "command": "", "open": true, "focus": false, "shell": "zsh" } ],
                 "remote.containers.persistSession": false,
                 "remote.autoForwardPorts": false
             }

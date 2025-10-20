@@ -13,6 +13,7 @@ provider "aws" {
   profile = var.aws_profile
 }
 
+data "aws_caller_identity" "current" {}
 
 resource "aws_s3_bucket" "terraform_state" {
   bucket = var.bucket_name
@@ -49,5 +50,3 @@ resource "aws_dynamodb_table" "terraform_locks" {
     type = "S"
   }
 }
-
-

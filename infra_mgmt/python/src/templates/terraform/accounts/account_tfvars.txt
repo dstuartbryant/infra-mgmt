@@ -1,11 +1,18 @@
 target_account_id                     = "{{ target_accound_id }}"
 {% if cicd -%}
+    {% if git_type == "S3" %}
 s3_git_bucket_name                    = "{{ s3_git_bucket_name }}"
+codebuild_project_name                = "{{ codebuild_project_name }}"
+    {% elif git_type == "GitHub" %}
+repositories                          = { {% for key, value in github.repositories.items() %}{{ key }} = "{{ value }}"{% if not loop.last %}, {% endif %}{% endfor %} }
+github_branch                         = "{{ github.branch }}"
+codestar_connection_arn               = "{{ github.codestar_arn }}"
+codebuild_project_prefix              = "{{ github.codebuild_project_prefix }}"
+    {% endif %}
 review_notification_emails            = [{% for item in review_notification_emails %} "{{ item }}"{% if not loop.last %},{% endif %} {% endfor %}]
 build_notification_emails             = [{% for item in build_notification_emails %} "{{ item }}"{% if not loop.last %},{% endif %} {% endfor %}]
 codeartifact_domain_name              = "{{ codeartifact_domain_name }}"
 codeartifact_repository_name          = "{{ codeartifact_repository_name }}"
-codebuild_project_name                = "{{ codebuild_project_name }}"
 {%- endif %}
 {% if vpc -%}
 vpc_cidr_block                        = "{{ vpc_cidr_block }}"

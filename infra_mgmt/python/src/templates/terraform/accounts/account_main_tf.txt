@@ -34,8 +34,9 @@ locals {
   identity_store_id            = tolist(data.aws_ssoadmin_instances.this.identity_store_ids)[0]
 }
 {% if cicd %}
+    {% if git_type == "S3" %}
 module "cicd" {
-  source = "../../../modules/cicd"
+  source = "../../../modules/cicd/cicd_gits3"
 
   providers = {
     aws.org_main        = aws.org_main
@@ -50,7 +51,28 @@ module "cicd" {
   codebuild_project_name       = var.codebuild_project_name
   identitystore_id             = local.identity_store_id
   iam_output_json_path         = "${path.module}/../../.config/iam/iam_output.json"
-}   
+}
+    {% elif git_type == "GitHub" %}
+module "cicd" {
+  source = "../../../modules/cicd/cicd_github"
+
+  providers = {
+    aws.org_main        = aws.org_main
+    aws.identity_center = aws.identity_center
+  }
+
+  repositories                 = var.repositories
+  github_branch                = var.github_branch
+  codestar_connection_arn      = var.codestar_connection_arn
+  codebuild_project_prefix     = var.codebuild_project_prefix
+  review_notification_emails   = var.review_notification_emails
+  build_notification_emails    = var.build_notification_emails
+  codeartifact_domain_name     = var.codeartifact_domain_name
+  codeartifact_repository_name = var.codeartifact_repository_name
+  identitystore_id             = local.identity_store_id
+  iam_output_json_path         = "${path.module}/../../.config/iam/iam_output.json"
+}
+    {% endif %}
 {% endif %}
 {% if vpc %}
 module "vpc_vpn" {
