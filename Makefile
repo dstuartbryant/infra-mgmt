@@ -52,13 +52,17 @@ IAM_MODULE := $(MODULES_DIR)/iam_users_groups
 # Terraform individual accounts creation mgmt
 ACCOUNTS_DIR := $(BUILD_DIR)/accounts
 LOGS_DIR := $(TERRAFORM_DIR)/.logs
-ALL_ACCOUNT_DIRS := $(shell find $(ACCOUNTS_DIR) -mindepth 1 -maxdepth 1 -type d -not -name '.*' -exec basename {} \;)
 ACCOUNTS_BUILD_OUTPUT_DIR := $(ACCOUNTS_DIR)/.output
 
 # Services - post Terraform
 SERVICES_DIR := $(INFRA_DIR)/services
 SERVICES_BUILD_DIR := $(SERVICES_DIR)/.build
 PYTHON_PACKAGE_BUILD_DIR := $(SERVICES_BUILD_DIR)/python
+
+# Ensure all necessary directories exist before any targets are run
+ENSURE_DIRS_EXIST := $(shell mkdir -p $(BUILD_DIR) $(ACCOUNTS_DIR) $(ACCOUNTS_BUILD_OUTPUT_DIR) $(IAM_TF_DIR) $(SERVICES_DIR) $(SERVICES_BUILD_DIR) $(LOGS_DIR))
+
+ALL_ACCOUNT_DIRS := $(shell find $(ACCOUNTS_DIR) -mindepth 1 -maxdepth 1 -type d -not -name '.*' -exec basename {} \;)
 
 
 .PHONY: all show-paths bootstrap backend-init backend-config accounts org
@@ -421,3 +425,8 @@ vpn-configs-all:
 	\
 	@echo "\n>>> Success!"; \
 	echo "All available VPN configuration files have been created in: $$GENERATED_VPN_DIR"
+
+
+instantaneous-configs-backup:
+	@echo "\n>>> Generating Instantaneous Configs Backup..."
+	python -m infra_mgmt.python.bin.backup_reinit.configs_backup $(USER_CONFIG_DIR) $(MODULES_DIR)

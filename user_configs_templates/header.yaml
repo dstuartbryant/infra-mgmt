@@ -66,6 +66,9 @@ backend:
   bucket_name: <terraform-backend-bucket-name>
   dynamodb_table_name: <terraform-backend-dynamodb-table-name>
 
+backup:
+  bucket_name: <terraform-configs-backend-bucket-name>
+  account_id: "<management-account-id"
 
 ###################################################################
 # MANAGED ACCOUNTS     

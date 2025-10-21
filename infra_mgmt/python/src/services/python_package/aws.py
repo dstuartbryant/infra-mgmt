@@ -10,24 +10,45 @@ def get_boto3_session(
     role_name_to_assume: str = "OrganizationAccountAccessRole",
 ) -> boto3.Session:
     """
-    Gets a boto3 session, assuming a role if an account ID is provided.
+    Gets a boto3 session.
+    If an account ID is provided and it differs from the profile's account,
+    it assumes a role in the target account.
+    If the account ID is the same as the profile's, it uses the profile directly.
 
     Args:
         profile: The AWS profile to use for the initial session.
         region: The AWS region.
-        account_id_to_assume: The ID of the account to assume a role in.
-        role_name_to_assume: The name of the role to assume.
+        account_id_to_assume: The ID of the account to operate in.
+        role_name_to_assume: The name of the role to assume if needed.
 
     Returns:
         A boto3 session.
     """
-    if account_id_to_assume:
-        # Create a session using the admin profile to assume the role
-        base_session = boto3.Session(profile_name=profile, region_name=region)
-        sts_client = base_session.client("sts")
-        role_arn = f"arn:aws:iam::{account_id_to_assume}:role/{role_name_to_assume}"
+    # Create a session using the direct profile first
+    base_session = boto3.Session(profile_name=profile, region_name=region)
 
+    if account_id_to_assume:
+        # Check the account ID of the current session
+        sts_client = base_session.client("sts")
         try:
+            caller_identity = sts_client.get_caller_identity()
+            current_account_id = caller_identity["Account"]
+        except Exception as e:
+            print(f"Error getting caller identity for profile '{profile}': {e}")
+            raise
+
+        # If the target account is the same as the current one, no need to assume role
+        if current_account_id == account_id_to_assume:
+            print(
+                f"Already in target account {current_account_id}. Using profile"
+                f" '{profile}' directly."
+            )
+            return base_session
+
+        # If target account is different, proceed with assuming role
+        role_arn = f"arn:aws:iam::{account_id_to_assume}:role/{role_name_to_assume}"
+        try:
+            print(f"Assuming role {role_arn}...")
             assumed_role_object = sts_client.assume_role(
                 RoleArn=role_arn, RoleSessionName="AssumedRoleSession"
             )
@@ -44,8 +65,8 @@ def get_boto3_session(
             print(f"Error assuming role {role_arn}: {e}")
             raise
     else:
-        # Return a session using the direct profile
-        return boto3.Session(profile_name=profile, region_name=region)
+        # If no account ID is specified, just use the base session
+        return base_session
 
 
 def list_s3_folders(
@@ -151,6 +172,39 @@ def get_codeartifact_authorization_token(
         return None
 
 
+def upload_zip_to_s3(
+    profile: str,
+    region: str,
+    local_zip_path: str,
+    bucket_name: str,
+    s3_key: str,
+    account_id_to_assume: Optional[str] = None,
+) -> bool:
+    """
+    Uploads a local .zip archive to a specified S3 bucket.
+
+    Args:
+        profile: The AWS profile to use.
+        region: The AWS region.
+        local_zip_path: The local path to the .zip file.
+        bucket_name: The name of the S3 bucket.
+        s3_key: The key (path) for the uploaded object in the S3 bucket.
+        account_id_to_assume: The ID of the account where the bucket resides.
+
+    Returns:
+        True if the upload was successful, False otherwise.
+    """
+    try:
+        session = get_boto3_session(profile, region, account_id_to_assume)
+        s3_client = session.client("s3")
+        s3_client.upload_file(local_zip_path, bucket_name, s3_key)
+        print(f"Successfully uploaded {local_zip_path} to s3://{bucket_name}/{s3_key}")
+        return True
+    except Exception as e:
+        print(f"An error occurred uploading to S3: {e}")
+        return False
+
+
 if __name__ == "__main__":
     # --- Configuration ---
     # Profile with permissions to assume roles in other accounts
@@ -192,7 +246,8 @@ if __name__ == "__main__":
         account_id_to_assume=managed_account_id,
     )
     print(
-        f"Folders in S3 bucket '{managed_s3_bucket}' (in account {managed_account_id}): {s3_folders_managed}"
+        f"Folders in S3 bucket '{managed_s3_bucket}' (in account "
+        f"{managed_account_id}): {s3_folders_managed}"
     )
 
     ca_packages_managed = list_codeartifact_packages(
@@ -203,11 +258,13 @@ if __name__ == "__main__":
         account_id_to_assume=managed_account_id,
     )
     print(
-        f"Packages in CodeArtifact repo '{managed_ca_repo}' (in account {managed_account_id}): {ca_packages_managed}"
+        f"Packages in CodeArtifact repo '{managed_ca_repo}' (in account "
+        f"{managed_account_id}): {ca_packages_managed}"
     )
     print("-" * 40)
 
-    # --- Scenario 3: Getting a CodeArtifact Authorization Token for a managed account ---
+    # --- Scenario 3: Getting a CodeArtifact Authorization Token for a managed
+    # account ---
     print("\n--- Getting CodeArtifact Token for a managed account ---")
     # The domain owner is often the same as the managed account ID
     managed_ca_domain_owner = managed_account_id
@@ -222,9 +279,41 @@ if __name__ == "__main__":
 
     if token:
         print(
-            f"Successfully retrieved CodeArtifact token for domain '{managed_ca_domain}' in account '{managed_account_id}'"
+            f"Successfully retrieved CodeArtifact token for domain "
+            f"'{managed_ca_domain}' in account '{managed_account_id}'"
         )
         # print(f"Token: {token}") # Uncomment to display token
     else:
         print("Failed to retrieve CodeArtifact token.")
+    print("-" * 40)
+
+    # --- Scenario 4: Uploading a file to S3 in a managed account ---
+    print("\n--- Uploading a file to S3 in a managed account ---")
+    # Create a dummy zip file for testing
+    dummy_zip_path = "test.zip"
+    with open(dummy_zip_path, "w") as f:
+        f.write("This is a test file.")
+    import zipfile
+
+    with zipfile.ZipFile(dummy_zip_path, "w") as zf:
+        zf.writestr("test.txt", "This is a test file.")
+
+    s3_key = f"backups/{dummy_zip_path}"
+    upload_success = upload_zip_to_s3(
+        admin_profile,
+        aws_region,
+        dummy_zip_path,
+        managed_s3_bucket,
+        s3_key,
+        account_id_to_assume=managed_account_id,
+    )
+    if upload_success:
+        print("File upload successful.")
+    else:
+        print("File upload failed.")
+
+    # Clean up the dummy file
+    import os
+
+    os.remove(dummy_zip_path)
     print("-" * 40)

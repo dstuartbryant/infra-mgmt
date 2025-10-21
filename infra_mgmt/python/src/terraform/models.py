@@ -28,6 +28,11 @@ class BackendVars(BaseModel):
     dynamodb_table_name: str
 
 
+class BackupConfig(BaseModel):
+    bucket_name: str
+    account_id: str
+
+
 class HeaderConfigModel(BaseModel):
     base_email: str
     org_prefix: str
@@ -36,6 +41,7 @@ class HeaderConfigModel(BaseModel):
     org_email: str
     aws_profiles: AwsProfiles
     backend: BackendVars
+    backup: Optional[BackupConfig] = None
     parent_id: str
     managed_accounts: dict
 
