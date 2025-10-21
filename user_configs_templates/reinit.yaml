@@ -1,0 +1,12 @@
+# reinit.yaml
+#
+# Configuration file for reinitializing a project previously
+# in work/development.
+
+aws_profile:
+  profile: <profile-name>
+  region: <profile-region>
+
+backup:
+  bucket_name: <terraform-configs-backend-bucket-name>
+  account_id: "<management-account-id"

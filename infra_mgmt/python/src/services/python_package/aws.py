@@ -205,6 +205,61 @@ def upload_zip_to_s3(
         return False
 
 
+def download_latest_zip_from_s3(
+    profile: str,
+    region: str,
+    bucket_name: str,
+    local_download_dir: str,
+    account_id_to_assume: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Downloads the most recently uploaded .zip archive from a given S3 bucket.
+
+    Args:
+        profile: The AWS profile to use.
+        region: The AWS region.
+        bucket_name: The name of the S3 bucket.
+        local_download_dir: The local directory to download the file to.
+        account_id_to_assume: The ID of the account where the bucket resides.
+
+    Returns:
+        The local path to the downloaded file, or None if no file was found or an error occurred.
+    """
+    try:
+        session = get_boto3_session(profile, region, account_id_to_assume)
+        s3_client = session.client("s3")
+
+        # List all objects in the bucket
+        paginator = s3_client.get_paginator("list_objects_v2")
+        pages = paginator.paginate(Bucket=bucket_name)
+        all_objects = [obj for page in pages for obj in page.get("Contents", [])]
+
+        if not all_objects:
+            print(f"No objects found in bucket '{bucket_name}'.")
+            return None
+
+        # Find the most recently modified object
+        latest_object = max(all_objects, key=lambda obj: obj["LastModified"])
+        latest_object_key = latest_object["Key"]
+        print(f"Found latest object: '{latest_object_key}'")
+
+        # Download the file
+        import os
+
+        if not os.path.exists(local_download_dir):
+            os.makedirs(local_download_dir)
+        local_file_path = os.path.join(local_download_dir, latest_object_key)
+
+        print(f"Downloading to {local_file_path}...")
+        s3_client.download_file(bucket_name, latest_object_key, local_file_path)
+        print("Download successful.")
+
+        return local_file_path
+    except Exception as e:
+        print(f"An error occurred downloading from S3: {e}")
+        return None
+
+
 if __name__ == "__main__":
     # --- Configuration ---
     # Profile with permissions to assume roles in other accounts
@@ -316,4 +371,25 @@ if __name__ == "__main__":
     import os
 
     os.remove(dummy_zip_path)
+    print("-" * 40)
+
+    # --- Scenario 5: Downloading the latest backup from S3 in a managed account ---
+    print("\n--- Downloading latest backup from S3 in a managed account ---")
+    download_dir = "temp_downloads"
+    downloaded_file = download_latest_zip_from_s3(
+        admin_profile,
+        aws_region,
+        managed_s3_bucket,
+        download_dir,
+        account_id_to_assume=managed_account_id,
+    )
+    if downloaded_file:
+        print(f"File downloaded to: {downloaded_file}")
+        # Clean up the downloaded file and directory
+        import shutil
+
+        shutil.rmtree(download_dir)
+        print("Cleaned up temporary download directory.")
+    else:
+        print("File download failed.")
     print("-" * 40)

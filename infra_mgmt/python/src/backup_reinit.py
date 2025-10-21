@@ -2,11 +2,18 @@
 
 import shutil
 import tempfile
+from copy import deepcopy
 from datetime import datetime
-from os import mkdir, path, remove, walk
+from os import listdir, mkdir, path, remove, walk
 
-from infra_mgmt.python.src.services.python_package.aws import upload_zip_to_s3
+import yaml
+
+from infra_mgmt.python.src.services.python_package.aws import (
+    download_latest_zip_from_s3,
+    upload_zip_to_s3,
+)
 from infra_mgmt.python.src.terraform.config import load_terraform_user_config
+from infra_mgmt.python.src.terraform.models import ReinitConfig
 
 CURR_DIR = path.dirname(path.abspath(__file__))  # infra_mgmt/python/src
 PYTHON_DIR = path.dirname(path.abspath(CURR_DIR))  # infra_mgmt/python
@@ -69,6 +76,22 @@ PURGE_PATHS = {
     USER_CONFIGS_DIR: "all",
 }
 
+RESTORE_PATHS = [
+    TF_CLIENT_VPN_CONFIGS_DIR,
+    TF_CONFIG_DIR,
+    TF_LOGS_DIR,
+    GENERATED_VPN_CONFIGS_DIR,
+    USER_CONFIGS_DIR,
+    TF_BACKEND_DIR,
+    TF_ORG_DIR,
+    TF_BUILD_ACCOUNTS_DIR,
+    TF_BUILD_ACCOUNTS_OUTPUT_DIR,
+]
+
+
+class RestoreError(Exception):
+    path
+
 
 def find_files_by_name(directory, file_name):
     """
@@ -89,6 +112,21 @@ def find_files_by_name(directory, file_name):
                 absolute_path = path.abspath(path.join(root, f))
                 found_files.append(absolute_path)
     return found_files
+
+
+def remove_string_from_list(my_list: list, string_to_remove: str) -> list:
+    """Removes a string from a list of strings, if it exists.
+
+    Args:
+        my_list (list): A list of strings.
+        string_to_remove (str): The string to remove from the list.
+
+    Returns:
+        list: The updated list.
+    """
+    if string_to_remove in my_list:
+        my_list.remove(string_to_remove)
+    return my_list
 
 
 def zip_directory_to_temp_archive(source_directory):
@@ -217,11 +255,137 @@ def purge_configs() -> None:
                     remove(cpath)
 
 
-def reinit_project_configs(config_dir_path: str, tf_modules_dir: str) -> None:
+def load_reinit_config(config_dir_path: str) -> ReinitConfig:
+    """Pulls backup configs for project and puts them back in their configuration
+    "places".
+    Args:
+        config_dir_path (str): Path to the user configs directory.
+
+    """
+    config_fpath = path.join(config_dir_path, "reinit.yaml")
+    ric = yaml.safe_load(open(config_fpath, "r"))
+
+    return ReinitConfig(**ric)
+
+
+def reinit_project_configs(
+    config_dir_path: str, tf_modules_dir: str, local_download_dir: str
+) -> None:
     """Pulls backup configs for project and puts them back in their configuration
     "places".
     Args:
         config_dir_path (str): Path to the user configs directory.
         tf_modules_dir (str): Path to the terraform modules directory.
+        local_download_dir (str): The local directory to restore the files to.
     """
-    pass
+    ric = load_reinit_config(config_dir_path=config_dir_path)
+
+    # with tempfile.TemporaryDirectory() as temp_dir:
+    #     downloaded_zip_path = download_latest_zip_from_s3(
+    #         profile=ric.aws_profile.profile,
+    #         region=ric.aws_profile.region,
+    #         bucket_name=ric.backup.bucket_name,
+    #         local_download_dir=temp_dir,
+    #         account_id_to_assume=ric.backup.account_id,
+    #     )
+
+    #     if downloaded_zip_path:
+    #         with tempfile.TemporaryDirectory() as unzip_dir:
+    #             print(f"Unzipping {downloaded_zip_path} to {unzip_dir}...")
+    #             shutil.unpack_archive(downloaded_zip_path, unzip_dir)
+
+    #             # The archive contains a single directory with the backed-up files.
+    #             unzipped_items = listdir(unzip_dir)
+    #             if not unzipped_items:
+    #                 print("Error: Unzipped archive is empty.")
+    #                 return
+
+    #             source_content_dir = path.join(unzip_dir, unzipped_items[0])
+
+    #             print(
+    #                 "Restoring files from"
+    #                 f" {source_content_dir} to {local_download_dir}"
+    #             )
+    #             shutil.copytree(
+    #                 source_content_dir, local_download_dir, dirs_exist_ok=True
+    #             )
+    #             print("Restore complete.")
+
+    for restore_dir in RESTORE_PATHS:
+        print(restore_dir)
+
+    contents = listdir(local_download_dir)
+    contents.sort()
+    print("\n\ncontents:")
+    for cnt in contents:
+        print(cnt)
+    print("\n\n")
+
+    terraform_finds = []
+    restored = []
+    for restore_dir in RESTORE_PATHS:
+        restore_base = path.basename(restore_dir)
+        if restore_base in contents:
+            contents = remove_string_from_list(contents, restore_base)
+            source_path = path.join(local_download_dir, restore_base)
+            dest_path = restore_dir
+            if path.isdir(source_path):
+                shutil.copytree(source_path, dest_path, dirs_exist_ok=True)
+            restored.append(restore_dir)
+        elif "terraform" in restore_dir:
+            terraform_finds.append(restore_dir)
+
+    # Filter out RESTORE_PATHS that have already been used
+    restore_paths = deepcopy(RESTORE_PATHS)
+    for rd in restored:
+        restore_paths = remove_string_from_list(restore_paths, rd)
+
+    # Restore terraform/backend and terraform/org content
+    restored = []
+    for rp in restore_paths:
+        if "terraform" in rp and "backend" in rp:
+            if "terraform" in contents:
+                source_path = path.join(local_download_dir, "terraform", "backend")
+                dest_path = rp
+                if path.isdir(source_path):
+                    shutil.copytree(source_path, dest_path, dirs_exist_ok=True)
+                restored.append(rp)
+        if "terraform" in rp and "org" in rp:
+            if "terraform" in contents:
+                source_path = path.join(local_download_dir, "terraform", "org")
+                dest_path = rp
+                if path.isdir(source_path):
+                    shutil.copytree(source_path, dest_path, dirs_exist_ok=True)
+                restored.append(rp)
+
+    # Filter out `terraform` from contents at this point
+    contents = remove_string_from_list(contents, "terraform")
+
+    # Filter out RESTORE_PATHS that have already been used
+    for rd in restored:
+        restore_paths = remove_string_from_list(restore_paths, rd)
+
+    # At this point we should only have account terraform.tfvars files to process
+    if len(restore_paths) > 1:
+        raise RestoreError(
+            f"Number of remaining 'restore paths' is {len(restore_paths)}"
+        )
+    if restore_paths[0] != TF_BUILD_ACCOUNTS_DIR:
+        raise RestoreError(f"Final path to restore is not {TF_BUILD_ACCOUNTS_DIR}")
+
+    restore_path = restore_paths[0]
+    print("\n\n")
+    for encoded_fpath in contents:
+        if "terraform.tfvars" not in encoded_fpath:
+            continue
+        fpath = "/" + encoded_fpath.replace("__", "/")
+        accounts_subdir_name = path.basename(path.dirname(path.abspath(fpath)))
+        print(fpath)
+        print(f"{accounts_subdir_name}\n")
+        rdir = path.join(restore_path, accounts_subdir_name)
+        if not path.isdir(rdir):
+            mkdir(rdir)
+        source_path = path.join(local_download_dir, encoded_fpath)
+        dest_path = path.join(rdir, "terraform.tfvars")
+        shutil.copy(source_path, dest_path)
+    return contents, restore_paths

@@ -259,3 +259,8 @@ class InitIamParam:
     profile: str
     region: str
     relative_module_path: str
+
+
+class ReinitConfig(BaseModel):
+    aws_profile: AwsProfile
+    backup: BackupConfig
