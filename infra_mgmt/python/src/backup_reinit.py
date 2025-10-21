@@ -3,7 +3,7 @@
 import shutil
 import tempfile
 from datetime import datetime
-from os import mkdir, path, walk
+from os import mkdir, path, remove, walk
 
 from infra_mgmt.python.src.services.python_package.aws import upload_zip_to_s3
 from infra_mgmt.python.src.terraform.config import load_terraform_user_config
@@ -29,6 +29,8 @@ TF_BACKEND_DIR = path.join(TF_DIR, "backend")
 
 TF_ORG_DIR = path.join(TF_DIR, "org")
 
+SERVICES_DIR = path.join(INFRA_MGMT_DIR, "services")
+
 USER_CONFIGS_DIR = path.join(PROJECT_DIR, "user_configs")
 
 GENERATED_VPN_CONFIGS_DIR = path.join(PROJECT_DIR, "generated_vpn_configs")
@@ -51,6 +53,19 @@ BACKUP_PATHS = {
     TF_LOGS_DIR: "all",
     TF_BACKEND_DIR: ["backend.hcl", "terraform.tfvars"],
     TF_ORG_DIR: ["terraform.tfvars"],
+    USER_CONFIGS_DIR: "all",
+}
+
+
+PURGE_PATHS = {
+    GENERATED_VPN_CONFIGS_DIR: "all",
+    SERVICES_DIR: "all",
+    TF_BUILD_DIR: "all",
+    TF_CLIENT_VPN_CONFIGS_DIR: "all",
+    TF_CONFIG_DIR: "all",
+    TF_LOGS_DIR: "all",
+    TF_BACKEND_DIR: ["backend.hcl", "terraform.tfvars"],
+    TF_ORG_DIR: [".terraform", ".terraform.lock.hcl", "terraform.tfvars"],
     USER_CONFIGS_DIR: "all",
 }
 
@@ -110,7 +125,7 @@ def zip_directory_to_temp_archive(source_directory):
         raise e
 
 
-def generate_backup_archive(config_dir_path: str, tf_modules_dir: str):
+def generate_backup_archive(config_dir_path: str, tf_modules_dir: str) -> None:
     """Generates instantaneous project configurations backup .zip archive and uploads
     it to the AWS Organization's Management account's purpose-made S3 bucket.
 
@@ -177,3 +192,36 @@ def generate_backup_archive(config_dir_path: str, tf_modules_dir: str):
 
         # Clean up the temporary directory containing the archive
         archive_temp_dir_obj.cleanup()
+
+
+def purge_configs() -> None:
+    """Purges instantaneous project configurations.
+
+    Removes all existing configurations for a current project, in order to clean out
+    directories so to work on a different project.
+    """
+    for pdir in PURGE_PATHS:
+        content_switch = PURGE_PATHS[pdir]
+        if isinstance(content_switch, str):
+            if content_switch == "all":
+                if path.isdir(pdir):
+                    shutil.rmtree(pdir)
+                elif path.isfile(pdir):
+                    remove(pdir)
+        elif isinstance(content_switch, list):
+            for fname in content_switch:
+                cpath = path.join(pdir, fname)
+                if path.isdir(cpath):
+                    shutil.rmtree(cpath)
+                elif path.isfile(cpath):
+                    remove(cpath)
+
+
+def reinit_project_configs(config_dir_path: str, tf_modules_dir: str) -> None:
+    """Pulls backup configs for project and puts them back in their configuration
+    "places".
+    Args:
+        config_dir_path (str): Path to the user configs directory.
+        tf_modules_dir (str): Path to the terraform modules directory.
+    """
+    pass

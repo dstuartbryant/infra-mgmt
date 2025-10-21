@@ -430,3 +430,7 @@ vpn-configs-all:
 instantaneous-configs-backup:
 	@echo "\n>>> Generating Instantaneous Configs Backup..."
 	python -m infra_mgmt.python.bin.backup_reinit.configs_backup $(USER_CONFIG_DIR) $(MODULES_DIR)
+
+instantaneous-configs-purge:
+	@echo "\n>>> Purging Instantaneous Configs..."
+	python -m infra_mgmt.python.bin.backup_reinit.configs_purge
